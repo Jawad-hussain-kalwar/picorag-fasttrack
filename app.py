@@ -15,7 +15,7 @@ def main() -> int:
 
 
 def _run_repl() -> int:
-    print("PicoRAG REPL. Type your question and press Enter.")
+    print("Type your question and press Enter.")
     print("Type 'exit' or 'quit' to stop.\n")
     while True:
         try:

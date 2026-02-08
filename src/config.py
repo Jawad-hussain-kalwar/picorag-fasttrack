@@ -57,9 +57,17 @@ CHROMA_PERSIST_DIR = PROJECT_ROOT / "chroma_data"
 COLLECTION_NAME = "documents"
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-OPENROUTER_MODEL = "z-ai/glm-4.5-air:free"
+OPENROUTER_MODEL = "google/gemma-3-4b-it:free"
 OPENROUTER_TIMEOUT_SECONDS = 60.0
 OPENROUTER_MAX_TOKENS = 300
 OPENROUTER_TEMPERATURE = 0.2
+OPENROUTER_RATE_LIMIT = 20  # requests per minute for free tier
 
 TOP_K = 3
+
+# --- MIRAGE experiment settings ---
+MIRAGE_DIR = PROJECT_ROOT / "MIRAGE" / "mirage"
+MIRAGE_COLLECTION_NAME = "mirage_doc_pool"
+RUNS_DIR = PROJECT_ROOT / "runs"
+E1_K_VALUES = [3, 5, 10]
+E1_PARTIAL_N = 100

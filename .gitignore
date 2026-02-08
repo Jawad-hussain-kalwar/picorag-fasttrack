@@ -1,4 +1,4 @@
-﻿# environment variables
+# environment variables
 .env
 
 # Python bytecode and compiled artifacts
@@ -116,6 +116,7 @@ $RECYCLE.BIN/
 
 # Local project data/cache (adjust if you want to track)
 chroma_data/
+runs/
 
 # Documentation/build systems
 docs/_build/
@@ -139,3 +140,9 @@ flake8.log
 # Misc
 *.sqlite3
 *.db
+
+# Null files
+**/*null*
+**/null
+*.null
+null

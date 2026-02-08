@@ -65,3 +65,54 @@ def search(collection, query: str, n_results: int):
         include=["documents", "metadatas", "distances"],
     )
 
+
+def index_mirage_pool(
+    collection,
+    doc_pool: list[dict],
+    batch_size: int = 500,
+) -> int:
+    """Index MIRAGE doc_pool chunks into ChromaDB.
+
+    Each chunk gets a unique ID of 'mapped_id:pool_index'.
+    Skips indexing if collection already has the expected count.
+    Returns total chunks indexed.
+    """
+    existing = collection.count()
+    if existing >= len(doc_pool):
+        log.info(
+            "MIRAGE pool already indexed",
+            event="index_done",
+            chunks=existing,
+        )
+        return existing
+
+    log.info(
+        "Indexing MIRAGE doc_pool",
+        event="index_start",
+        total_chunks=len(doc_pool),
+    )
+    for start in range(0, len(doc_pool), batch_size):
+        batch = doc_pool[start : start + batch_size]
+        ids = [f"{c['mapped_id']}:{start + i}" for i, c in enumerate(batch)]
+        documents = [c["doc_chunk"] for c in batch]
+        metadatas = [
+            {
+                "mapped_id": c["mapped_id"],
+                "doc_name": c["doc_name"],
+                "support": c["support"],
+                "pool_index": start + i,
+            }
+            for i, c in enumerate(batch)
+        ]
+        collection.upsert(ids=ids, documents=documents, metadatas=metadatas)
+        log.debug(
+            "Indexed batch",
+            event="index_doc",
+            batch_start=start,
+            batch_size=len(batch),
+        )
+
+    total = collection.count()
+    log.info("MIRAGE indexing complete", event="index_done", chunks=total)
+    return total
+

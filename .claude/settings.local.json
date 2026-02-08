@@ -8,7 +8,16 @@
       "Bash(D:/Thesis/picorag-fasttrack/.venv/Scripts/pip.exe list:*)",
       "Bash(findstr:*)",
       "Bash(D:/Thesis/picorag-fasttrack/.venv/Scripts/python.exe:*)",
-      "Bash(.venv/Scripts/python.exe:*)"
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(while read f)",
+      "Bash(do wc -l \"$f\")",
+      "Read(//d/Thesis/picorag-fasttrack/**)",
+      "Bash(.venv\\\\Scripts\\\\python.exe -m unittest:*)",
+      "Bash(d:\\\\Thesis\\\\picorag-fasttrack\\\\.venv\\\\Scripts\\\\python.exe -m unittest:*)",
+      "Bash(\".venv\\\\Scripts\\\\python.exe\" run_e1.py --partial --phase retrieval)",
+      "Bash(dir:*)",
+      "Bash(\".venv\\\\Scripts\\\\python.exe\":*)",
+      "Bash(\".venv\\\\Scripts\\\\python.exe\" -c \"import run_e1; print\\(''run_e1 imports OK''\\)\")"
     ]
   }
 }
