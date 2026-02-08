@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:pypi.org)",
+      "Bash(py -3.10:*)",
+      "Bash(D:/Thesis/picorag-fasttrack/.venv/Scripts/pip.exe install:*)",
+      "Bash(D:/Thesis/picorag-fasttrack/.venv/Scripts/pip.exe list:*)",
+      "Bash(findstr:*)",
+      "Bash(D:/Thesis/picorag-fasttrack/.venv/Scripts/python.exe:*)",
+      "Bash(.venv/Scripts/python.exe:*)"
+    ]
+  }
+}
