@@ -118,7 +118,7 @@ The experimental sequence is designed as a **progressive build-up** where each e
 - **E5** assesses complex agentic controller integration (multi-hop, tool calling) on-device
 
 **Answering RQ2** (Algorithm combinations and trade-offs):
-- **E1** provides baseline with single embedding model (all-mpnet-base-v2) and vector-only retrieval
+- **E1** provides baseline with single embedding model (all-MiniLM-L6-v2) and vector-only retrieval
 - **E2** systematically varies embeddings, retrieval methods (Vector/BM25/Hybrid), reranking to identify optimal combinations
 - **E5** tests hybrid retrieval + reformulation in agentic setting
 
@@ -242,7 +242,7 @@ Our evaluation employs a multi-dimensional metrics framework:
 ### 5.2 Core Components (Defaults)
 
 **Embedding Model (Baseline):**
-- `sentence-transformers/all-mpnet-base-v2` (768-dimensional embeddings, 384 token limit)
+- `all-MiniLM-L6-v2`
 - Alternative model explored in E2 (one small, recent open embedding)
 
 **Vector Store:**
@@ -265,11 +265,6 @@ Our evaluation employs a multi-dimensional metrics framework:
 - **Gemini 2.5 Flash** (E4 only) — cloud API for comparison
 - Matched decoding parameters to local SLM for fair comparison
 
-**Frontend:**
-- Next.js 15 + React 19 + Vercel AI SDK
-- Multi-turn, multi-thread chat interface
-- Per-thread knowledge base selection
-
 ### 5.3 Dataset
 - **Primary:** MIRAGE (Mixed + Oracle settings)
 - **Evaluation Modes:** Mixed (realistic RAG), Oracle (generation ceiling)
@@ -291,7 +286,7 @@ Establish a clean, reproducible local-only baseline implementing the core RAG pi
 
 **Research Question Mapping:**
 - **RQ1** (Architectural integration): Tests foundational SLM-retriever integration on constrained hardware; measures baseline resource consumption (RAM, VRAM, latency) for local RAG
-- **RQ2** (Algorithm combinations): Establishes baseline with single embedding model (all-mpnet-base-v2) and vector-only retrieval; sweeps chunk size and k parameters to understand basic retrieval trade-offs
+- **RQ2** (Algorithm combinations): Establishes baseline with single embedding model (all-MiniLM-L6-v2) and vector-only retrieval; sweeps chunk size and k parameters to understand basic retrieval trade-offs
 
 **Objective Fulfillment:**
 - **Objective A:** Implements complete lightweight RAG framework (core pipeline)
@@ -302,7 +297,7 @@ Establish a clean, reproducible local-only baseline implementing the core RAG pi
 *Retrieval Configuration:*
 - **Vector Store:** Chroma (embedded mode)
 - **Retrieval Method:** Vector-only (cosine similarity)
-- **Embedding Model:** all-mpnet-base-v2
+- **Embedding Model:** all-MiniLM-L6-v2
 - **Parameter Sweep:** chunk size ∈ {256, 512}, k ∈ {3, 5, 10}
 
 *Generation Configuration:*
@@ -357,7 +352,7 @@ Systematically quantify accuracy/efficiency trade-offs from varying embedding mo
 4. **Hybrid + Reranker** (optional) — MiniLM cross-encoder on top-50 → top-k (CPU)
 
 *Embedding Models (Compared):*
-1. **all-mpnet-base-v2** (E1 baseline)
+1. **all-MiniLM-L6-v2** (E1 baseline)
 2. **One alternative small, recent open embedding** (e.g., newer sentence-transformers model)
 
 *Fixed Components:*
@@ -607,7 +602,7 @@ dataset: mirage_mixed | mirage_oracle
 
 # Embedding Configuration
 embed:
-  model: all-mpnet-base-v2 | <alternative-embedding-model>
+  model: all-MiniLM-L6-v2 | <alternative-embedding-model>
 
 # Indexing Configuration
 index:

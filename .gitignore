@@ -1,4 +1,7 @@
-﻿# Python bytecode and compiled artifacts
+﻿# environment variables
+.env
+
+# Python bytecode and compiled artifacts
 __pycache__/
 *.py[cod]
 *$py.class
