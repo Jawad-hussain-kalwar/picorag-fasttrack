@@ -1,7 +1,7 @@
-from config import CHROMA_PERSIST_DIR, COLLECTION_NAME, DATA_DIR, TOP_K
-from generate import generate_answer
-from logger import get_logger
-from retrieve import ensure_indexed, get_client, get_collection, search
+﻿from src.config import CHROMA_PERSIST_DIR, COLLECTION_NAME, DATA_DIR, TOP_K
+from src.generate import generate_answer
+from src.logger import get_logger
+from src.retrieve import ensure_indexed, get_client, get_collection, search
 
 
 log = get_logger("pico-rag.pipeline")
@@ -43,3 +43,4 @@ def answer_question(question: str) -> dict:
         "answer": answer,
         "contexts": contexts,
     }
+

@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ENV_PATH = PROJECT_ROOT / ".env"
 
 
@@ -28,6 +28,29 @@ def _load_dotenv(dotenv_path: Path) -> None:
 
 
 _load_dotenv(ENV_PATH)
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in {"0", "false", "no"}
+
+
+# Log verbosity presets (set with LOG_VERBOSITY in .env):
+# - "silent": only errors are shown.
+# - "quiet": warnings and errors are shown (default).
+# - "normal": info, warnings, and errors are shown.
+# - "debug": debug + all higher levels are shown.
+LOG_VERBOSITY = os.getenv("LOG_VERBOSITY", "quiet").strip().lower()
+VERBOSITY_TO_LOG_LEVEL = {
+    "silent": "ERROR",
+    "quiet": "WARNING",
+    "normal": "INFO",
+    "debug": "DEBUG",
+}
+LOG_LEVEL = VERBOSITY_TO_LOG_LEVEL.get(LOG_VERBOSITY, "WARNING")
+LOG_COLOR = _env_bool("LOG_COLOR", default=True)
 
 DATA_DIR = PROJECT_ROOT / "data"
 CHROMA_PERSIST_DIR = PROJECT_ROOT / "chroma_data"

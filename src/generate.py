@@ -1,15 +1,15 @@
-import os
+﻿import os
 
 import httpx
 
-from config import (
+from src.config import (
     OPENROUTER_BASE_URL,
     OPENROUTER_MAX_TOKENS,
     OPENROUTER_MODEL,
     OPENROUTER_TEMPERATURE,
     OPENROUTER_TIMEOUT_SECONDS,
 )
-from logger import get_logger
+from src.logger import get_logger
 
 
 log = get_logger("pico-rag.generate")
@@ -90,3 +90,4 @@ def generate_answer(question: str, contexts: list[dict]) -> str:
     except (KeyError, IndexError, AttributeError) as exc:
         log.error("Unexpected OpenRouter response format", event="error")
         raise RuntimeError(f"Unexpected OpenRouter response format: {body}") from exc
+

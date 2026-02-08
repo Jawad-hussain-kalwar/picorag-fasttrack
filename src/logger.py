@@ -4,6 +4,8 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from src.config import LOG_COLOR, LOG_LEVEL
+
 try:
     from colorama import Back, Fore, Style, init
 
@@ -210,9 +212,9 @@ def get_logger(name: str = "pico-rag") -> RAGLogger:
     if logger.handlers:
         return RAGLogger(logger)
 
-    level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+    level_name = os.getenv("LOG_LEVEL", LOG_LEVEL).upper()
     level = getattr(logging, level_name, logging.INFO)
-    use_color = _env_bool("LOG_COLOR", default=True)
+    use_color = _env_bool("LOG_COLOR", default=LOG_COLOR)
 
     handler = logging.StreamHandler()
     handler.setFormatter(FastStyleFormatter(use_color=use_color))

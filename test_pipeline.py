@@ -1,12 +1,12 @@
-import os
+﻿import os
 import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
 
-from chunking import naive_chunk
-from generate import build_prompt, generate_answer
-from retrieve import ensure_indexed, get_client, get_collection, search
+from src.chunking import naive_chunk
+from src.generate import build_prompt, generate_answer
+from src.retrieve import ensure_indexed, get_client, get_collection, search
 
 
 class TestChunking(unittest.TestCase):
@@ -110,10 +110,11 @@ class TestGeneration(unittest.TestCase):
                 return FakeResponse()
 
         with patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key"}, clear=True):
-            with patch("generate.httpx.Client", FakeClient):
+            with patch("src.generate.httpx.Client", FakeClient):
                 with self.assertRaises(RuntimeError):
                     generate_answer("Q?", contexts)
 
 
 if __name__ == "__main__":
     unittest.main()
+

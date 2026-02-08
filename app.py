@@ -1,7 +1,7 @@
-import sys
+﻿import sys
 
-from logger import get_logger
-from pipeline import answer_question
+from src.logger import get_logger
+from src.pipeline import answer_question
 
 
 log = get_logger("pico-rag.app")
@@ -64,3 +64,4 @@ def _run_single_query(question: str) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

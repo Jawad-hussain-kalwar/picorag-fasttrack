@@ -1,9 +1,9 @@
-import chromadb
+﻿import chromadb
 from chromadb.config import Settings
 
-from chunking import naive_chunk
-from ingest import load_documents_from_dir
-from logger import get_logger
+from src.chunking import naive_chunk
+from src.ingest import load_documents_from_dir
+from src.logger import get_logger
 
 
 log = get_logger("pico-rag.retrieve")
@@ -64,3 +64,4 @@ def search(collection, query: str, n_results: int):
         n_results=n_results,
         include=["documents", "metadatas", "distances"],
     )
+
