@@ -208,6 +208,7 @@ def _make_judge_request(
     messages: list[dict],
     headers: dict,
     max_http_retries: int = 3,
+    model: str | None = None,
 ) -> dict | None:
     """Make one judge API call with HTTP-level retries.
 
@@ -215,10 +216,11 @@ def _make_judge_request(
     """
     global _last_call_time
 
+    use_model = model or JUDGE_MODEL
     min_interval = 60.0 / JUDGE_RATE_LIMIT
 
     payload = {
-        "model": JUDGE_MODEL,
+        "model": use_model,
         "messages": messages,
         "temperature": JUDGE_TEMPERATURE,
         "max_tokens": JUDGE_MAX_TOKENS,
@@ -242,7 +244,7 @@ def _make_judge_request(
 
             if response.status_code == 429:
                 wait = min(2 ** attempt * 5, 60)
-                log.warning(f"Rate limited ({JUDGE_MODEL}), waiting {wait}s",
+                log.warning(f"Rate limited ({use_model}), waiting {wait}s",
                             event="warning", attempt=attempt)
                 time.sleep(wait)
                 continue
@@ -278,6 +280,7 @@ def call_judge(
     prediction: str,
     gold_answers: list[str] | None = None,
     max_tool_retries: int = 5,
+    model: str | None = None,
 ) -> dict:
     """Call the judge model via OpenRouter tool-calling.
 
@@ -312,7 +315,7 @@ def call_judge(
     }
 
     for tool_attempt in range(1, max_tool_retries + 1):
-        body = _make_judge_request(messages, headers)
+        body = _make_judge_request(messages, headers, model=model)
         if body is None:
             return null_result("API_FAILED")
 

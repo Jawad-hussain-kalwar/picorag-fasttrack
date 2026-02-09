@@ -15,7 +15,6 @@ from src.config import (
     OPENROUTER_BASE_URL,
     OPENROUTER_EMBED_MODEL,
     OPENROUTER_RATE_LIMIT,
-    OPENROUTER_TIMEOUT_SECONDS,
 )
 from src.logger import get_logger
 
@@ -29,6 +28,7 @@ def embed_texts_openrouter(
     texts: list[str],
     model: str = OPENROUTER_EMBED_MODEL,
     batch_size: int = 50,
+    timeout: float = 180.0,
 ) -> list[list[float]]:
     """Embed texts via OpenRouter embeddings API.
 
@@ -63,9 +63,10 @@ def embed_texts_openrouter(
             "input": batch,
         }
 
+        batch_done = False
         for attempt in range(1, 4):
             try:
-                with httpx.Client(timeout=OPENROUTER_TIMEOUT_SECONDS) as client:
+                with httpx.Client(timeout=timeout) as client:
                     response = client.post(
                         f"{OPENROUTER_BASE_URL}/embeddings",
                         headers=headers,
@@ -74,7 +75,7 @@ def embed_texts_openrouter(
 
                 if response.status_code == 429:
                     wait = min(2 ** attempt * 5, 60)
-                    log.warning(f"Embed rate limited ({model}), waiting {wait}s", event="warning")
+                    print(f"  Embed rate limited ({model}), waiting {wait}s (attempt {attempt}/3)", flush=True)
                     time.sleep(wait)
                     continue
 
@@ -92,19 +93,25 @@ def embed_texts_openrouter(
                 data.sort(key=lambda x: x["index"])
                 batch_embs = [item["embedding"] for item in data]
                 all_embeddings.extend(batch_embs)
+                batch_done = True
                 break
 
             except httpx.TimeoutException:
                 if attempt < 3:
+                    print(f"  Embed timeout ({model}), retrying ({attempt}/3)", flush=True)
                     time.sleep(2 ** attempt)
                     continue
                 raise RuntimeError("Embed request timed out after all retries")
 
-        if (start + batch_size) % 500 < batch_size:
-            log.info(
-                f"Embedded {min(start + batch_size, len(texts))}/{len(texts)}",
-                event="info",
+        if not batch_done:
+            raise RuntimeError(
+                f"Embed batch failed after all retries ({model}), "
+                f"batch {start//batch_size + 1}/{(len(texts) + batch_size - 1)//batch_size}"
             )
+
+        done_count = min(start + batch_size, len(texts))
+        if done_count % 100 < batch_size or done_count == len(texts):
+            print(f"    Embedded {done_count}/{len(texts)}", flush=True)
 
     return all_embeddings
 
@@ -154,6 +161,17 @@ def index_mirage_with_custom_embeddings(
         )
         return existing
 
+    # Build set of already-indexed IDs for resume support
+    existing_ids: set[str] = set()
+    if existing > 0:
+        all_stored = collection.get(include=[])
+        existing_ids = set(all_stored["ids"])
+        log.info(
+            f"Resuming: {len(existing_ids)} chunks already indexed, "
+            f"{len(doc_pool) - len(existing_ids)} remaining",
+            event="index_resume",
+        )
+
     log.info(
         f"Indexing {len(doc_pool)} chunks with custom embeddings",
         event="index_start",
@@ -161,8 +179,13 @@ def index_mirage_with_custom_embeddings(
 
     for start in range(0, len(doc_pool), batch_size):
         batch = doc_pool[start : start + batch_size]
-        texts = [c["doc_chunk"] for c in batch]
         ids = [f"{c['mapped_id']}:{start + i}" for i, c in enumerate(batch)]
+
+        # Skip batch if all IDs already exist
+        if existing_ids and all(id_ in existing_ids for id_ in ids):
+            continue
+
+        texts = [c["doc_chunk"] for c in batch]
         metadatas: list[dict[str, Any]] = [
             {
                 "mapped_id": c["mapped_id"],
@@ -181,11 +204,9 @@ def index_mirage_with_custom_embeddings(
             metadatas=metadatas,  # type: ignore[arg-type]
         )
 
-        if (start + batch_size) % 500 < batch_size:
-            log.info(
-                f"Indexed {min(start + batch_size, len(doc_pool))}/{len(doc_pool)}",
-                event="index_doc",
-            )
+        done_count = min(start + batch_size, len(doc_pool))
+        if done_count % 250 < batch_size or done_count == len(doc_pool):
+            print(f"    Indexed {done_count}/{len(doc_pool)} chunks", flush=True)
 
     total = collection.count()
     log.info("Custom embedding indexing complete", event="index_done", chunks=total)
@@ -215,3 +236,32 @@ def search_with_custom_embeddings(
         n_results=n_results,
         include=["documents", "metadatas", "distances"],
     ))
+
+
+def batch_search_with_custom_embeddings(
+    collection_name: str,
+    queries: list[str],
+    n_results: int,
+    embed_fn=None,
+    persist_dir: str | None = None,
+) -> list[dict[str, Any]]:
+    """Batch search: embed all queries in one call, then query ChromaDB per query.
+
+    Much faster than individual search_with_custom_embeddings calls because
+    it avoids N separate embed API round-trips.
+    """
+    if embed_fn is None:
+        embed_fn = embed_texts_openrouter
+
+    collection = get_custom_collection(collection_name, persist_dir)
+    all_embeddings = embed_fn(queries)
+
+    results: list[dict[str, Any]] = []
+    for emb in all_embeddings:
+        result = collection.query(
+            query_embeddings=[emb],
+            n_results=n_results,
+            include=["documents", "metadatas", "distances"],
+        )
+        results.append(cast(dict[str, Any], result))
+    return results

@@ -17,9 +17,10 @@ from src.logger import get_logger
 
 log = get_logger("pico-rag.generate")
 
-# Thread-safe rate limiter state
-_last_call_time: float = 0.0
-_rate_lock = threading.Lock()
+# Per-model rate limiter state (so local/online calls don't block each other)
+_rate_locks: dict[str, threading.Lock] = {}
+_last_call_times: dict[str, float] = {}
+_init_lock = threading.Lock()
 
 
 def build_prompt(question: str, contexts: list[dict]) -> list[dict]:
@@ -53,10 +54,29 @@ def build_prompt(question: str, contexts: list[dict]) -> list[dict]:
 # MIRAGE prompt builders (match MIRAGE's exact format for comparability)
 # ---------------------------------------------------------------------------
 
+_SYSTEM_BASE = (
+    "You are a helpful assistant. Give ONLY the answer, nothing else. "
+    "No explanations, no full sentences, no parenthetical qualifiers.\n\n"
+    "Examples:\n"
+    "Q: Who painted the Mona Lisa?\nA: Leonardo da Vinci\n"
+    "Q: What year did the Titanic sink?\nA: 1912\n"
+)
+
+_SYSTEM_CITED = (
+    "You are a helpful assistant. Give ONLY the answer with source citations "
+    "in [1], [2] format. No explanations, no full sentences.\n\n"
+    "CORRECT citations: [1], [2], [3]\n"
+    "WRONG citations: 【1†L1-L3】, 【2】, (1), {1} — NEVER use these formats.\n\n"
+    "Examples:\n"
+    "Q: Who painted the Mona Lisa?\nA: Leonardo da Vinci [1]\n"
+    "Q: What year did the Titanic sink?\nA: 1912 [2], [3]\n"
+)
+
+
 def build_base_prompt(question: str) -> list[dict]:
     """Base (closed-book): question only, no context."""
     return [
-        {"role": "system", "content": "You are a helpful assistant.\n"},
+        {"role": "system", "content": _SYSTEM_BASE},
         {"role": "user", "content": f"Question: {question}\n\nAnswer concisely in a few words: \n"},
     ]
 
@@ -64,7 +84,7 @@ def build_base_prompt(question: str) -> list[dict]:
 def build_oracle_prompt(question: str, oracle_chunk: str) -> list[dict]:
     """Oracle: question + gold context chunk."""
     return [
-        {"role": "system", "content": "You are a helpful assistant.\n"},
+        {"role": "system", "content": _SYSTEM_BASE},
         {
             "role": "user",
             "content": (
@@ -80,7 +100,7 @@ def build_mixed_prompt(question: str, chunks: list[str]) -> list[dict]:
     """Mixed (RAG): question + numbered retrieved chunks."""
     numbered = "\n".join(f"{i + 1}. {c}" for i, c in enumerate(chunks))
     return [
-        {"role": "system", "content": "You are a helpful assistant.\n"},
+        {"role": "system", "content": _SYSTEM_BASE},
         {
             "role": "user",
             "content": (
@@ -96,7 +116,7 @@ def build_mixed_prompt_cited(question: str, chunks: list[str]) -> list[dict]:
     """Mixed (RAG) with citation instructions: question + numbered chunks."""
     numbered = "\n".join(f"[{i + 1}] {c}" for i, c in enumerate(chunks))
     return [
-        {"role": "system", "content": "You are a helpful assistant.\n"},
+        {"role": "system", "content": _SYSTEM_CITED},
         {
             "role": "user",
             "content": (
@@ -122,8 +142,6 @@ def call_openrouter(
 
     Returns the generated text. Raises RuntimeError on persistent failure.
     """
-    global _last_call_time
-
     api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set.")
@@ -131,22 +149,32 @@ def call_openrouter(
     model = model or OPENROUTER_MODEL
     min_interval = 60.0 / OPENROUTER_RATE_LIMIT
 
-    # Merge system messages into first user message for models that don't
-    # support the system role (e.g. gemma-3 via Google AI Studio).
-    merged: list[dict] = []
-    system_parts: list[str] = []
-    for msg in messages:
-        if msg["role"] == "system":
-            system_parts.append(msg["content"])
-        else:
-            if system_parts and msg["role"] == "user":
-                prefix = "\n".join(system_parts).strip()
-                merged.append({"role": "user", "content": f"{prefix}\n\n{msg['content']}"})
-                system_parts = []
+    # Per-model rate limiter setup
+    if model not in _rate_locks:
+        with _init_lock:
+            if model not in _rate_locks:
+                _rate_locks[model] = threading.Lock()
+                _last_call_times[model] = 0.0
+
+    # Merge system messages into first user message only for models that
+    # don't support the system role (Gemma via Google AI Studio).
+    if "gemma" in model.lower():
+        merged: list[dict] = []
+        system_parts: list[str] = []
+        for msg in messages:
+            if msg["role"] == "system":
+                system_parts.append(msg["content"])
             else:
-                merged.append(msg)
-    if not merged:
-        merged = [{"role": "user", "content": "\n".join(system_parts)}]
+                if system_parts and msg["role"] == "user":
+                    prefix = "\n".join(system_parts).strip()
+                    merged.append({"role": "user", "content": f"{prefix}\n\n{msg['content']}"})
+                    system_parts = []
+                else:
+                    merged.append(msg)
+        if not merged:
+            merged = [{"role": "user", "content": "\n".join(system_parts)}]
+    else:
+        merged = messages
 
     payload = {
         "model": model,
@@ -160,11 +188,11 @@ def call_openrouter(
     }
 
     for attempt in range(1, max_retries + 1):
-        with _rate_lock:
-            elapsed = time.monotonic() - _last_call_time
+        with _rate_locks[model]:
+            elapsed = time.monotonic() - _last_call_times[model]
             if elapsed < min_interval:
                 time.sleep(min_interval - elapsed)
-            _last_call_time = time.monotonic()
+            _last_call_times[model] = time.monotonic()
         try:
             with httpx.Client(timeout=OPENROUTER_TIMEOUT_SECONDS) as client:
                 response = client.post(
@@ -201,7 +229,7 @@ def call_openrouter(
             if "choices" not in body or not body["choices"]:
                 err_msg = body.get("error", {}).get("message", str(body))
                 raise RuntimeError(f"OpenRouter returned no choices: {err_msg}")
-            text = body["choices"][0]["message"]["content"].strip()
+            text = (body["choices"][0]["message"]["content"] or "").strip()
             return text
 
         except httpx.TimeoutException:

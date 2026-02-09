@@ -60,10 +60,10 @@ source .venv/bin/activate     # Linux/Mac
 .venv\Scripts\python.exe run_e1.py --full --resume
 
 # Lint (ruff)
-.venv\Scripts\python.exe -m ruff check src/ run_e1.py run_e2.py run_e3.py run_judge.py app.py test_pipeline.py
+.venv\Scripts\python.exe -m ruff check src/ run_e1.py run_e2.py run_e3.py run_e4.py run_judge.py app.py test_pipeline.py
 
 # Type check (mypy) — some pre-existing warnings in CONFIGS pattern are expected
-.venv\Scripts\python.exe -m mypy src/ run_e1.py run_e2.py run_e3.py run_judge.py --ignore-missing-imports
+.venv\Scripts\python.exe -m mypy src/ run_e1.py run_e2.py run_e3.py run_e4.py run_judge.py --ignore-missing-imports
 
 # Python version: 3.10.11
 ```
@@ -85,9 +85,19 @@ Source code lives in `src/`. Entry points live at project root.
 - **`src/logger.py`** — Custom `RAGLogger` with colorama-based event styling and `timer()` context manager. Configure via `LOG_LEVEL` and `LOG_COLOR` env vars.
 
 ### Experiment Infrastructure
-- **`run_e1.py`** — E1 experiment runner. Orchestrates retrieval evaluation + generation evaluation on MIRAGE. Supports `--partial` (100 Qs) and `--full` (7,560 Qs) modes with checkpointing.
-- **`src/mirage_loader.py`** — Loads MIRAGE JSON files from `MIRAGE/mirage/` (dataset, doc_pool, oracle). Builds lookups and gold labels.
+- **`run_e1.py`** — E1 experiment runner. Vanilla vector-only RAG baseline. Supports `--partial` (100 Qs) and `--full` (7,560 Qs) with checkpointing.
+- **`run_e2.py`** — E2 experiment runner. Hybrid retrieval (BM25 + vector + reranking). Selects "Local-Best" config.
+- **`run_e3.py`** — E3 experiment runner. Selective answering with abstention gate on Local-Best.
+- **`run_e4.py`** — E4 experiment runner. Local vs Online comparison (concurrent eval with ThreadPoolExecutor).
+- **`run_judge.py`** — LLM-as-judge evaluation runner.
+- **`src/mirage_loader.py`** — Loads MIRAGE JSON files from `MIRAGE/mirage/`. Builds lookups and gold labels.
 - **`src/metrics.py`** — Evaluation metrics: EM_loose, EM_strict, F1, Recall@k, Precision@k, nDCG@k, MRR, MIRAGE RAG metrics (NV, CA, CI, CM).
+- **`src/bm25.py`** — BM25 sparse retrieval for hybrid search (E2+).
+- **`src/hybrid.py`** — Reciprocal Rank Fusion (RRF) combining vector + BM25 results.
+- **`src/rerank.py`** — Voyage AI reranking integration.
+- **`src/embed_openrouter.py`** — OpenRouter embedding API client (for Qwen3 embeddings in E2+).
+- **`src/gate.py`** — Abstention gate for selective answering (E3).
+- **`src/judge.py`** — LLM-as-judge evaluation via OpenRouter.
 
 ### Tests
 - **`test_pipeline.py`** — unittest-based. Tests chunking, ChromaDB persistence (real instances in temp dirs), prompt building, and API error handling.

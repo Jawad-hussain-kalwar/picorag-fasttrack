@@ -93,3 +93,9 @@ E3_ABSTAIN_MESSAGE = "Not enough evidence in knowledge base"
 E3_LOCAL_BEST_CONFIG = "5_vector_qwen3"
 E3_LOCAL_BEST_K = 5
 E3_N_UNANSWERABLE = 20
+
+# --- E4 experiment settings ---
+E4_ONLINE_MODEL = "openai/gpt-oss-120b:exacto"
+E4_ONLINE_EMBED_MODEL = "qwen/qwen3-embedding-8b"
+E4_JUDGE_MODEL = "openai/gpt-oss-120b:exacto"
+E4_LOCAL_BEST_THRESHOLD = 0.75
