@@ -59,6 +59,12 @@ source .venv/bin/activate     # Linux/Mac
 # Resume interrupted E1 run
 .venv\Scripts\python.exe run_e1.py --full --resume
 
+# Lint (ruff)
+.venv\Scripts\python.exe -m ruff check src/ run_e1.py run_e2.py run_e3.py run_judge.py app.py test_pipeline.py
+
+# Type check (mypy) — some pre-existing warnings in CONFIGS pattern are expected
+.venv\Scripts\python.exe -m mypy src/ run_e1.py run_e2.py run_e3.py run_judge.py --ignore-missing-imports
+
 # Python version: 3.10.11
 ```
 

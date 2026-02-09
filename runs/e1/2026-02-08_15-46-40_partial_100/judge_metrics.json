@@ -1,0 +1,14 @@
+{
+  "k=5": {
+    "faithfulness": 0.929,
+    "groundedness": 0.9185,
+    "n_judged": 92,
+    "n_skipped": 8
+  },
+  "k=10": {
+    "faithfulness": 0.941,
+    "groundedness": 0.9261,
+    "n_judged": 88,
+    "n_skipped": 12
+  }
+}

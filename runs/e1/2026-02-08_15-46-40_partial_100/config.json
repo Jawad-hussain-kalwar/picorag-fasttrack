@@ -1,0 +1,14 @@
+{
+  "mode": "partial_100",
+  "model": "google/gemma-3-4b-it:free",
+  "temperature": 0.2,
+  "max_tokens": 300,
+  "k_values": [
+    3,
+    5,
+    10
+  ],
+  "n_questions": 100,
+  "n_chunks": 500,
+  "timestamp": "2026-02-08_16-06-49"
+}

@@ -1,0 +1,8 @@
+{
+  "minilm_index_time_s": 0.06,
+  "bm25_index_time_s": 1.15,
+  "qwen3_index_time_s": 0.42,
+  "total_chunks_indexed": 2500,
+  "peak_ram_mb": 453.8,
+  "ttft_note": "TTFT equals total latency for non-streaming API calls"
+}

@@ -68,13 +68,13 @@ PicoRAG addresses this gap by demonstrating that **effective RAG can be achieved
 **RQ2: Algorithm Combinations and Efficiency-Accuracy Trade-offs**
 *How do various combinations of embedding models, indexing structures, and retrieval algorithms affect the efficiency-accuracy trade-off when operating under mid-tier hardware constraints?*
 
-- **Measurable aspects:** Index size (MB), query latency (ms), memory usage (MB), retrieval accuracy (Recall@k, nDCG@k, MRR), generation quality (EM/F1), grounding quality (Faithfulness, Citation metrics)
-- **Focus areas:** Embedding model selection, vector search algorithms, hybrid retrieval (BM25 + vector fusion), reranking strategies, chunking parameters (size, overlap, k)
+- **Measurable aspects:** Index size (MB), query latency (ms), memory usage (MB), retrieval accuracy (Recall@k, nDCG@k, MRR), generation quality (EM), grounding quality (Faithfulness, Citation metrics)
+- **Focus areas:** Embedding model selection, vector search algorithms, hybrid retrieval (BM25 + vector fusion), reranking strategies, retrieval depth (k)
 
 **RQ3: Local vs Cloud Viability Threshold**
 *What are the quantifiable performance differences between cloud-based and lightweight local RAG systems across standardized benchmarks, and at what quality threshold does local deployment become practically viable?*
 
-- **Measurable aspects:** Response quality (EM/F1, ROUGE scores), retrieval accuracy (Recall@k, nDCG, MRR), resource efficiency (energy per correct answer, tokens/watt), cost-effectiveness (queries/dollar vs queries/watt), latency profiles (TTFT, p95)
+- **Measurable aspects:** Response quality (EM, ROUGE scores), retrieval accuracy (Recall@k, nDCG, MRR), resource efficiency (energy per correct answer, tokens/watt), cost-effectiveness (queries/dollar vs queries/watt), latency profiles (TTFT, p95)
 - **Focus areas:** Local SLM vs online LLM generation quality, retrieval parity, total cost of ownership, acceptable quality degradation for local deployment
 
 ---
@@ -101,7 +101,7 @@ The experimental sequence is designed as a **progressive build-up** where each e
 - **E5** implements advanced agentic control flow (multi-hop reasoning, query reformulation)
 
 **Fulfilling Objective B** (Explore efficient algorithms):
-- **E1** establishes vector-only retrieval baseline with parameter sweeps (chunk size, k)
+- **E1** establishes vector-only retrieval baseline with k parameter sweep
 - **E2** systematically compares embedding models, BM25 vs Vector vs Hybrid retrieval, optional reranking
 - **E5** explores retrieval strategies in agentic context (tool calling, query reformulation)
 
@@ -202,10 +202,12 @@ Our evaluation employs a multi-dimensional metrics framework:
 - **MRR (Mean Reciprocal Rank):** Average of 1/rank for the first gold chunk
 
 #### 4.4.2 Generation Quality Metrics
-- **Exact Match (EM):** Fraction of generated answers that exactly match gold answer strings (after normalization)
-- **F1 Score:** Token-level F1 between generated answer and gold answer (harmonic mean of precision/recall)
-- **Faithfulness:** Fraction of claims in generated answer that are supported by retrieved contexts
-- **Groundedness:** Fraction of generated answer content that can be attributed to retrieved contexts
+- **Exact Match (EM):** Fraction of generated answers that exactly match gold answer strings (after normalization). Primary generation quality metric.
+- **Answer Relevance:** Degree to which the generated answer directly addresses the user question, regardless of answer length or phrasing style. This metric captures semantic question-answer alignment and avoids penalizing correct but more verbose generative responses.
+- **Semantic Answer Correctness:** Degree to which the generated answer is semantically equivalent to the gold/reference answer, even when wording differs. This metric credits correct paraphrases and meaning-preserving answer variants that strict lexical matching can miss.
+- **F1 Score:** Token-level F1 between generated answer and gold answer (harmonic mean of precision/recall). *Reported in E1 only, F1 penalises generative verbosity and is dropped from E2-E5 in favour of EM_loose.*
+- **Faithfulness:** Fraction of claims in generated answer that are supported by retrieved contexts. Computed via LLM-as-judge.
+- **Groundedness:** Fraction of generated answer content that can be attributed to retrieved contexts. Computed via LLM-as-judge.
 
 #### 4.4.3 Citation Quality Metrics
 - **Citation Precision:** Fraction of cited spans that genuinely support the generated answer
@@ -217,7 +219,6 @@ Our evaluation employs a multi-dimensional metrics framework:
 - **Peak RAM/VRAM:** Maximum memory usage during query processing (MB)
 - **Tokens In/Out:** Number of tokens processed (context) and generated (answer)
 - **Index Build Time:** Offline cost to embed and index document corpus (seconds)
-- **Energy per Correct Answer:** Joules consumed per correctly answered query (local only)
 
 #### 4.4.5 MIRAGE RAG Adaptability Metrics
 - **Noise Vulnerability (NV):** Susceptibility to distractors (lower is better)
@@ -228,7 +229,12 @@ Our evaluation employs a multi-dimensional metrics framework:
 #### 4.4.6 Decision-Aware Metrics (E3, E5)
 - **Selective Accuracy:** Fraction of answered queries that are correct (precision of answering)
 - **Coverage:** Fraction of queries for which the system provides an answer (recall of answering)
+- **AUPRC (Area Under Precision-Recall Curve):** Summary of abstention/decision quality across thresholds, computed on confidence-based answer vs abstain decisions. Chosen because abstention settings are commonly class-imbalanced, where precision-recall analysis is more informative than ROC summaries.
+- **ECE (Expected Calibration Error):** Calibration quality of decision confidence. Lower ECE indicates predicted confidence better matches observed empirical outcomes (correctness/answerability frequencies).
 - **Success@N:** Fraction of queries answered correctly within ≤N retrieval tool calls (E5)
+
+#### 4.4.7 LLM-as-Judge Reliability Metric (E2-E5)
+- **Human-Judge Cohen's Kappa:** Chance-corrected agreement between human spot-check labels and LLM-as-judge labels. This is the single reliability metric used to validate judge-based metrics (Faithfulness, Groundedness, Answer Relevance, Semantic Answer Correctness).
 
 ---
 
@@ -270,10 +276,11 @@ Our evaluation employs a multi-dimensional metrics framework:
 - **Evaluation Modes:** Mixed (realistic RAG), Oracle (generation ceiling)
 
 ### 5.4 Parameter Sweeps (Where Applicable)
-- **Chunk size:** {256, 512} tokens
 - **Top-k retrieval:** {3, 5, 10}
 - **Selective answering threshold (E3):** {low, mid, high}
 - **Agentic hops (E5):** ≤2 retrieval rounds
+
+*Note: Chunk size sweep is not applicable — MIRAGE provides pre-chunked documents (37,800 fixed chunks).*
 
 ---
 
@@ -286,7 +293,7 @@ Establish a clean, reproducible local-only baseline implementing the core RAG pi
 
 **Research Question Mapping:**
 - **RQ1** (Architectural integration): Tests foundational SLM-retriever integration on constrained hardware; measures baseline resource consumption (RAM, VRAM, latency) for local RAG
-- **RQ2** (Algorithm combinations): Establishes baseline with single embedding model (all-MiniLM-L6-v2) and vector-only retrieval; sweeps chunk size and k parameters to understand basic retrieval trade-offs
+- **RQ2** (Algorithm combinations): Establishes baseline with single embedding model (all-MiniLM-L6-v2) and vector-only retrieval; sweeps k parameter to understand basic retrieval trade-offs
 
 **Objective Fulfillment:**
 - **Objective A:** Implements complete lightweight RAG framework (core pipeline)
@@ -298,7 +305,7 @@ Establish a clean, reproducible local-only baseline implementing the core RAG pi
 - **Vector Store:** Chroma (embedded mode)
 - **Retrieval Method:** Vector-only (cosine similarity)
 - **Embedding Model:** all-MiniLM-L6-v2
-- **Parameter Sweep:** chunk size ∈ {256, 512}, k ∈ {3, 5, 10}
+- **Parameter Sweep:** k ∈ {3, 5, 10} (chunk size not applicable — MIRAGE uses pre-chunked documents)
 
 *Generation Configuration:*
 - **Local SLM:** gemma2-7b-it (Ollama)
@@ -311,12 +318,15 @@ Establish a clean, reproducible local-only baseline implementing the core RAG pi
 **Metrics:**
 - *Retrieval:* Recall@k, nDCG@k, MRR
 - *Generation:* EM, F1, Faithfulness, Groundedness
-- *Citation:* Citation Precision, Citation Recall
 - *Efficiency:* TTFT, latency p50/p95, peak RAM/VRAM, index build time
 - *MIRAGE:* NV, CA, CI, CM
 
+*Note: Citation Precision/Recall is deferred to E2–E5, where MIRAGE prompts will include citation instructions. E1 uses plain prompts without citation elicitation.*
+
+*Note: F1 is reported for E1 baseline but is known to penalise generative verbosity (see E1 results). EM_loose is the primary generation quality metric. F1 is dropped from E2–E5.*
+
 **Expected Deliverables:**
-1. Baseline metrics table (all configurations: chunk × k combinations)
+1. Baseline metrics table (all k configurations)
 2. Mixed vs Oracle performance comparison to isolate retrieval errors
 3. Resource consumption profile (memory, latency, throughput)
 
@@ -324,7 +334,7 @@ Establish a clean, reproducible local-only baseline implementing the core RAG pi
 - **Mixed vs Oracle gap:** Large gap indicates retrieval is primary bottleneck; small gap indicates generation limitation
 - **MIRAGE metrics:** High NV or CI indicates system weaknesses; CA shows context utilization effectiveness
 - **Efficiency profile:** Establishes resource budget for subsequent experiments
-- **Parameter sensitivity:** Identifies whether chunk size or k has greater impact on quality/efficiency
+- **Parameter sensitivity:** Identifies impact of k on quality/efficiency trade-off
 
 This baseline serves as the **reference point** for evaluating improvements in E2-E5.
 
@@ -358,23 +368,24 @@ Systematically quantify accuracy/efficiency trade-offs from varying embedding mo
 *Fixed Components:*
 - **Vector Store:** Chroma (embedded mode)
 - **Generator:** gemma2-7b-it (Ollama)
-- **Parameter Sweep:** Same chunk size and k sweep as E1 for fair comparison
+- **Parameter Sweep:** Same k sweep as E1 for fair comparison
 
 **Datasets:**
 - **Primary:** MIRAGE Mixed
 - **Ceiling:** MIRAGE Oracle
 
 **Metrics:**
-- *Retrieval:* Recall@k, nDCG@k, MRR (per retrieval method)
-- *Generation:* EM, F1, Faithfulness, Groundedness
-- *Citation:* Citation Precision, Citation Recall
+- *Retrieval:* Recall@k, Precision@k, nDCG@k, MRR (per retrieval method)
+- *Generation:* EM, Answer Relevance, Semantic Answer Correctness, Faithfulness, Groundedness
+- *Citation:* Citation Precision, Citation Recall (MIRAGE prompts include citation instructions from E2 onward)
+- *Judge Reliability:* Human-Judge Cohen's Kappa (from stratified human spot-check sample)
 - *Efficiency:* TTFT, latency p95, peak RAM/VRAM, index build time
 - *MIRAGE:* NV, CA, CI, CM
 
 **Expected Deliverables:**
 1. Comparative table: Vector vs BM25 vs Hybrid vs Hybrid+Rerank (retrieval and generation metrics)
 2. Embedding model comparison table
-3. Pareto frontier plot: Quality (EM/F1) vs Latency (p95)
+3. Pareto frontier plot: Quality (EM) vs Latency (p95)
 4. **Selection of "Local-Best"** configuration (retrieval method + embedding model + parameters)
 
 **How to Interpret Results:**
@@ -384,6 +395,25 @@ Systematically quantify accuracy/efficiency trade-offs from varying embedding mo
 - **Local-Best selection:** Choose configuration with best quality at acceptable latency (<2s p95) and memory footprint
 
 The **Local-Best** configuration from this experiment becomes the foundation for E3-E5.
+
+#### E2 Local-Best Selection Rubric
+
+**Hard constraints (eliminates config if violated):**
+- Recall@k ≥ 0.80 (can't generate correct answers without retrieving gold)
+
+**Weighted composite score (0–1):**
+
+| Metric | Weight | Rationale |
+|---|---|---|
+| EM_loose (Mixed) | 0.40 | End-to-end answer quality — primary objective |
+| nDCG@k | 0.25 | Retrieval ranking quality — gold chunk position matters |
+| Citation quality (mean CitP, CitR) | 0.15 | Attribution quality, needed for E3+ |
+| MIRAGE CA | 0.10 | Context utilisation — RAG benefit over closed-book |
+| 1 − MIRAGE NV | 0.10 | Noise robustness — penalty for distractor vulnerability |
+
+**Composite = Σ(weight × metric)**. All metrics are [0, 1] range. Pick highest composite. Tiebreaker (within 0.02): prefer simpler config (fewer components).
+
+**k selection:** Evaluate composite at each k ∈ {3, 5, 10}. Pick the (config, k) pair with highest composite.
 
 ---
 
@@ -419,8 +449,10 @@ Improve system reliability by implementing a **selective answering gate** that a
 - **Ceiling:** MIRAGE Oracle
 
 **Metrics:**
-- *Decision-Aware:* **Selective Accuracy** (correct among answered), **Coverage** (fraction answered)
-- *Generation:* EM, F1, Faithfulness, Groundedness (for answered queries)
+- *Decision-Aware:* **Selective Accuracy** (correct among answered), **Coverage** (fraction answered), **AUPRC** (threshold-robust abstention quality), **ECE** (confidence calibration quality)
+- *Generation:* EM, Answer Relevance, Semantic Answer Correctness, Faithfulness, Groundedness (for answered queries)
+- *Citation:* Citation Precision, Citation Recall
+- *Judge Reliability:* Human-Judge Cohen's Kappa (from stratified human spot-check sample)
 - *Efficiency:* Latency overhead of decision gate, TTFT, p95
 - *MIRAGE:* NV, CA, CI, CM (for answered queries)
 
@@ -472,8 +504,9 @@ Directly compare the **Local-Best** pipeline (from E2) against a cloud-based RAG
 - **Ceiling:** MIRAGE Oracle (isolates generator capability; shows Gemini's generation ceiling vs gemma2's)
 
 **Metrics:**
-- *Generation Quality:* EM, F1, Faithfulness, Groundedness, Citation Precision/Recall
+- *Generation Quality:* EM, Answer Relevance, Semantic Answer Correctness, Faithfulness, Groundedness, Citation Precision/Recall
 - *Retrieval Quality:* Recall@k, nDCG@k (identical for both, since retrieval is shared)
+- *Judge Reliability:* Human-Judge Cohen's Kappa (from stratified human spot-check sample)
 - *Efficiency:*
   - **Local:** TTFT, p95 latency, **energy per correct answer** (Joules/correct query)
   - **Online:** TTFT, p95 latency, **cost per correct answer** ($/correct query), **tokens/$**
@@ -488,8 +521,8 @@ Directly compare the **Local-Best** pipeline (from E2) against a cloud-based RAG
 **How to Interpret Results:**
 
 - **Generation Quality Gap (Mixed setting):**
-  - If Local EM/F1 ≥ 80% of Online EM/F1 → local quality is competitive
-  - If Local EM/F1 < 70% of Online EM/F1 → significant quality degradation
+  - If Local EM ≥ 80% of Online EM → local quality is competitive
+  - If Local EM < 70% of Online EM → significant quality degradation
 
 - **Oracle Comparison (Generation Ceiling):**
   - Gemini Oracle vs gemma2 Oracle shows inherent LLM capability gap
@@ -504,9 +537,10 @@ Directly compare the **Local-Best** pipeline (from E2) against a cloud-based RAG
   - Compare NV (noise vulnerability): Does local SLM degrade more with distractors?
   - Compare CA (context acceptability): Does Gemini leverage context more effectively?
 
+
 **Viability Threshold:**
 Local deployment is **practically viable** if:
-1. Local EM/F1 ≥ 75% of Online EM/F1 (acceptable quality degradation)
+1. Local EM ≥ 75% of Online EM (acceptable quality degradation)
 2. Local latency p95 < 5 seconds (usable interactive experience)
 3. Local energy/correct answer < Online cost/correct answer (when amortized over 1000 queries)
 
@@ -551,7 +585,10 @@ Evaluate an **agentic multi-hop controller** that autonomously orchestrates retr
 - *Answerability:*
   - **KB-Coverage Accuracy:** Correctly abstains when KB lacks answer (true negatives)
   - **False-Negative Rate:** Abstains when KB contains answer (over-conservative)
-- *Generation:* EM, F1, Faithfulness, Groundedness
+- *Decision-Aware Calibration:* **AUPRC** (threshold-robust abstention quality), **ECE** (confidence calibration quality)
+- *Generation:* EM, Answer Relevance, Semantic Answer Correctness, Faithfulness, Groundedness
+- *Citation:* Citation Precision, Citation Recall
+- *Judge Reliability:* Human-Judge Cohen's Kappa (from stratified human spot-check sample)
 - *Efficiency:* Step count (tool calls per query), TTFT, latency p95, peak RAM
 - *MIRAGE:* NV, CA, CI, CM
 
@@ -569,7 +606,7 @@ Evaluate an **agentic multi-hop controller** that autonomously orchestrates retr
   - Measure Recall@k improvement after reformulation (2nd hop vs 1st hop)
 
 - **Agentic vs Single-Shot (E2):**
-  - If E5 EM/F1 > E2 EM/F1 by ≥3% → agentic control justifies latency overhead
+  - If E5 EM > E2 EM by ≥3% → agentic control justifies latency overhead
   - If E5 latency p95 > 2× E2 latency → overhead may be prohibitive
 
 - **Answerability Handling:**
@@ -584,7 +621,7 @@ Evaluate an **agentic multi-hop controller** that autonomously orchestrates retr
 **Success Criterion:**
 Agentic control is beneficial if:
 1. Success@2 > Success@1 by ≥5% (multi-hop improves coverage)
-2. E5 EM/F1 ≥ E2 EM/F1 + 3% (quality improvement)
+2. E5 EM ≥ E2 EM + 3% (quality improvement)
 3. Latency p95 < 5 seconds (usable on constrained hardware)
 4. KB-Coverage Accuracy > 75% (reliable abstention)
 
@@ -607,8 +644,7 @@ embed:
 # Indexing Configuration
 index:
   type: chroma  # Fixed: Chroma embedded mode only
-  chunk_size: 256 | 512
-  chunk_overlap: 0  # Optional: 0%, 10%, 20%
+  # chunk_size not applicable — MIRAGE provides pre-chunked documents
 
 # Retrieval Configuration
 retrieval:
@@ -661,11 +697,14 @@ ISO 8601 format: `YYYY-MM-DD_HH-MM-SS`
 
 ### 7.3 Telemetry and Aggregation
 
+
 **Per-Query Telemetry (samples.csv):**
 - Query ID, query text, generated answer, gold answer
 - Retrieval: top-k chunk IDs, scores, Recall@k (binary), nDCG@k
-- Generation: EM (binary), F1, Faithfulness, Groundedness
+- Generation: EM (binary), F1 (E1 only), Answer Relevance, Semantic Answer Correctness, Faithfulness, Groundedness
+- Decision/Calibration (E3, E5): abstained (boolean), decision confidence score, calibrated decision probability, decision target label (for AUPRC/ECE computation)
 - Citation: Precision, Recall
+- Reliability (E2-E5): LLM-as-judge label, human spot-check label (sampled subset), agreement flag
 - Latency: retrieval_ms, generation_ms, total_ms
 - Resources: RAM snapshot (MB), VRAM snapshot (MB)
 

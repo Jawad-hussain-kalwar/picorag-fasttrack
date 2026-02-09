@@ -115,6 +115,77 @@ class TestGeneration(unittest.TestCase):
                     generate_answer("Q?", contexts)
 
 
+class TestGate(unittest.TestCase):
+    def test_cosine_abstain_low_confidence(self):
+        from src.gate import should_abstain
+        # distance=1.8 → confidence = 1 - 1.8/2 = 0.1 → below 0.5 threshold
+        abstain, conf = should_abstain([1.8, 1.9], threshold=0.5, method="cosine")
+        self.assertTrue(abstain)
+        self.assertAlmostEqual(conf, 0.1, places=5)
+
+    def test_cosine_no_abstain_high_confidence(self):
+        from src.gate import should_abstain
+        # distance=0.2 → confidence = 1 - 0.2/2 = 0.9 → above 0.5 threshold
+        abstain, conf = should_abstain([0.2, 0.5], threshold=0.5, method="cosine")
+        self.assertFalse(abstain)
+        self.assertAlmostEqual(conf, 0.9, places=5)
+
+    def test_empty_distances_abstains(self):
+        from src.gate import should_abstain
+        abstain, conf = should_abstain([], threshold=0.5)
+        self.assertTrue(abstain)
+        self.assertEqual(conf, 0.0)
+
+    def test_higher_better_method(self):
+        from src.gate import should_abstain
+        abstain, conf = should_abstain([0.8], threshold=0.5, method="higher_better")
+        self.assertFalse(abstain)
+        self.assertAlmostEqual(conf, 0.8, places=5)
+
+
+class TestE3Metrics(unittest.TestCase):
+    def test_selective_accuracy(self):
+        from src.metrics import selective_accuracy
+        preds = ["paris", "wrong", "berlin"]
+        golds = [["paris"], ["london"], ["berlin"]]
+        mask = [True, False, True]  # skip "wrong"
+        self.assertAlmostEqual(selective_accuracy(preds, golds, mask), 1.0)
+
+    def test_selective_accuracy_all_abstained(self):
+        from src.metrics import selective_accuracy
+        self.assertEqual(selective_accuracy(["a"], [["b"]], [False]), 0.0)
+
+    def test_coverage(self):
+        from src.metrics import coverage
+        self.assertAlmostEqual(coverage([True, True, False, True]), 0.75)
+        self.assertEqual(coverage([]), 0.0)
+
+    def test_auprc_perfect(self):
+        from src.metrics import auprc
+        # Perfect ranking: all positives at top
+        y_true = [1, 1, 0, 0]
+        y_scores = [0.9, 0.8, 0.3, 0.1]
+        result = auprc(y_true, y_scores)
+        self.assertAlmostEqual(result, 1.0, places=2)
+
+    def test_auprc_empty(self):
+        from src.metrics import auprc
+        self.assertEqual(auprc([], []), 0.0)
+        self.assertEqual(auprc([0, 0], [0.5, 0.3]), 0.0)  # no positives
+
+    def test_ece_perfect_calibration(self):
+        from src.metrics import ece
+        # Perfectly calibrated: conf matches accuracy
+        y_true = [1, 1, 1, 1, 1, 0, 0, 0, 0, 0]
+        y_conf = [0.95, 0.95, 0.95, 0.95, 0.95, 0.05, 0.05, 0.05, 0.05, 0.05]
+        result = ece(y_true, y_conf)
+        self.assertLess(result, 0.1)
+
+    def test_ece_empty(self):
+        from src.metrics import ece
+        self.assertEqual(ece([], []), 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()
 

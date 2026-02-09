@@ -1,0 +1,28 @@
+{
+  "experiment": "E2",
+  "mode": "smoke_10",
+  "model": "google/gemma-3-4b-it:free",
+  "embed_model": "qwen/qwen3-embedding-4b",
+  "rerank_model": "rerank-2.5-lite",
+  "temperature": 0.2,
+  "max_tokens": 300,
+  "k_values": [
+    3,
+    5,
+    10
+  ],
+  "n_index_questions": 50,
+  "n_index_chunks": 250,
+  "n_eval_questions": 10,
+  "rrf_k": 30,
+  "rerank_top_n": 25,
+  "configs": [
+    "1_vector_minilm",
+    "2_bm25",
+    "3_hybrid_minilm",
+    "4_hybrid_rerank_minilm",
+    "5_vector_qwen3",
+    "6_hybrid_qwen3"
+  ],
+  "timestamp": "2026-02-09_08-50-01"
+}

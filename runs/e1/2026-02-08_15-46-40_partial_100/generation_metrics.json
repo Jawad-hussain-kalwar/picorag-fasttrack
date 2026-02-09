@@ -1,0 +1,37 @@
+{
+  "base": {
+    "EM_loose": 0.05,
+    "EM_strict": 0.0,
+    "F1": 0.0654,
+    "avg_generation_ms": 3739.7,
+    "n_queries": 100
+  },
+  "oracle": {
+    "EM_loose": 0.82,
+    "EM_strict": 0.09,
+    "F1": 0.409,
+    "avg_generation_ms": 3450.1,
+    "n_queries": 100
+  },
+  "mixed_k3": {
+    "EM_loose": 0.72,
+    "EM_strict": 0.04,
+    "F1": 0.296,
+    "avg_generation_ms": 4250.0,
+    "n_queries": 100
+  },
+  "mixed_k5": {
+    "EM_loose": 0.7,
+    "EM_strict": 0.03,
+    "F1": 0.2795,
+    "avg_generation_ms": 4984.1,
+    "n_queries": 100
+  },
+  "mixed_k10": {
+    "EM_loose": 0.68,
+    "EM_strict": 0.01,
+    "F1": 0.2482,
+    "avg_generation_ms": 10665.1,
+    "n_queries": 100
+  }
+}

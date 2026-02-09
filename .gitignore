@@ -116,7 +116,6 @@ $RECYCLE.BIN/
 
 # Local project data/cache (adjust if you want to track)
 chroma_data/
-runs/
 
 # Documentation/build systems
 docs/_build/

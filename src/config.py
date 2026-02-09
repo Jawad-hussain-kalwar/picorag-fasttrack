@@ -57,11 +57,11 @@ CHROMA_PERSIST_DIR = PROJECT_ROOT / "chroma_data"
 COLLECTION_NAME = "documents"
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-OPENROUTER_MODEL = "google/gemma-3-4b-it:free"
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "google/gemma-3-4b-it")
 OPENROUTER_TIMEOUT_SECONDS = 60.0
 OPENROUTER_MAX_TOKENS = 300
 OPENROUTER_TEMPERATURE = 0.2
-OPENROUTER_RATE_LIMIT = 20  # requests per minute for free tier
+OPENROUTER_RATE_LIMIT = int(os.getenv("OPENROUTER_RATE_LIMIT", "600"))
 
 TOP_K = 3
 
@@ -71,3 +71,24 @@ MIRAGE_COLLECTION_NAME = "mirage_doc_pool"
 RUNS_DIR = PROJECT_ROOT / "runs"
 E1_K_VALUES = [3, 5, 10]
 E1_PARTIAL_N = 100
+
+# --- E2 experiment settings ---
+E2_K_VALUES = [3, 5, 10]
+E2_EVAL_N = 100
+E2_INDEX_N = 500
+E2_RERANK_TOP_N = 25
+E2_RRF_K = 30
+VOYAGE_RERANK_MODEL = "rerank-2.5-lite"
+OPENROUTER_EMBED_MODEL = "qwen/qwen3-embedding-4b"
+VOYAGE_API_KEY = os.getenv("VOYAGE_API_KEY", "")
+
+# --- E3 experiment settings ---
+# --- Judge settings ---
+JUDGE_MODEL = os.getenv("JUDGE_MODEL", "z-ai/glm-4.7-flash")
+JUDGE_RATE_LIMIT = int(os.getenv("JUDGE_RATE_LIMIT", "600"))
+
+# --- E3 experiment settings ---
+E3_THRESHOLDS = [0.3, 0.5, 0.7]
+E3_ABSTAIN_MESSAGE = "Not enough evidence in knowledge base"
+E3_LOCAL_BEST_CONFIG = "1_vector_minilm"  # placeholder, update after E2
+E3_LOCAL_BEST_K = 3                        # placeholder

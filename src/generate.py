@@ -1,4 +1,5 @@
 ﻿import os
+import threading
 import time
 
 import httpx
@@ -16,8 +17,9 @@ from src.logger import get_logger
 
 log = get_logger("pico-rag.generate")
 
-# Simple rate limiter state
+# Thread-safe rate limiter state
 _last_call_time: float = 0.0
+_rate_lock = threading.Lock()
 
 
 def build_prompt(question: str, contexts: list[dict]) -> list[dict]:
@@ -55,7 +57,7 @@ def build_base_prompt(question: str) -> list[dict]:
     """Base (closed-book): question only, no context."""
     return [
         {"role": "system", "content": "You are a helpful assistant.\n"},
-        {"role": "user", "content": f"Question: {question}\n\nAnswer : \n"},
+        {"role": "user", "content": f"Question: {question}\n\nAnswer concisely in a few words: \n"},
     ]
 
 
@@ -68,7 +70,7 @@ def build_oracle_prompt(question: str, oracle_chunk: str) -> list[dict]:
             "content": (
                 f"Question : {question}\n\n"
                 f"Context : {oracle_chunk}\n\n"
-                "Answer : "
+                "Answer concisely in a few words: "
             ),
         },
     ]
@@ -84,7 +86,24 @@ def build_mixed_prompt(question: str, chunks: list[str]) -> list[dict]:
             "content": (
                 f"Question : {question}\n\n"
                 f"Context : {numbered}\n\n"
-                "Answer : "
+                "Answer concisely in a few words: "
+            ),
+        },
+    ]
+
+
+def build_mixed_prompt_cited(question: str, chunks: list[str]) -> list[dict]:
+    """Mixed (RAG) with citation instructions: question + numbered chunks."""
+    numbered = "\n".join(f"[{i + 1}] {c}" for i, c in enumerate(chunks))
+    return [
+        {"role": "system", "content": "You are a helpful assistant.\n"},
+        {
+            "role": "user",
+            "content": (
+                f"Question : {question}\n\n"
+                f"Context :\n{numbered}\n\n"
+                "Answer concisely in a few words. "
+                "Cite your sources using [1], [2], etc.: "
             ),
         },
     ]
@@ -112,14 +131,26 @@ def call_openrouter(
     model = model or OPENROUTER_MODEL
     min_interval = 60.0 / OPENROUTER_RATE_LIMIT
 
-    # Rate limit: wait if needed
-    elapsed = time.monotonic() - _last_call_time
-    if elapsed < min_interval:
-        time.sleep(min_interval - elapsed)
+    # Merge system messages into first user message for models that don't
+    # support the system role (e.g. gemma-3 via Google AI Studio).
+    merged: list[dict] = []
+    system_parts: list[str] = []
+    for msg in messages:
+        if msg["role"] == "system":
+            system_parts.append(msg["content"])
+        else:
+            if system_parts and msg["role"] == "user":
+                prefix = "\n".join(system_parts).strip()
+                merged.append({"role": "user", "content": f"{prefix}\n\n{msg['content']}"})
+                system_parts = []
+            else:
+                merged.append(msg)
+    if not merged:
+        merged = [{"role": "user", "content": "\n".join(system_parts)}]
 
     payload = {
         "model": model,
-        "messages": messages,
+        "messages": merged,
         "temperature": OPENROUTER_TEMPERATURE,
         "max_tokens": OPENROUTER_MAX_TOKENS,
     }
@@ -129,7 +160,11 @@ def call_openrouter(
     }
 
     for attempt in range(1, max_retries + 1):
-        _last_call_time = time.monotonic()
+        with _rate_lock:
+            elapsed = time.monotonic() - _last_call_time
+            if elapsed < min_interval:
+                time.sleep(min_interval - elapsed)
+            _last_call_time = time.monotonic()
         try:
             with httpx.Client(timeout=OPENROUTER_TIMEOUT_SECONDS) as client:
                 response = client.post(
@@ -141,7 +176,7 @@ def call_openrouter(
             if response.status_code == 429:
                 wait = min(2 ** attempt * 5, 60)
                 log.warning(
-                    f"Rate limited, waiting {wait}s",
+                    f"Rate limited ({model}), waiting {wait}s",
                     event="warning",
                     attempt=attempt,
                 )
@@ -163,6 +198,9 @@ def call_openrouter(
                 )
 
             body = response.json()
+            if "choices" not in body or not body["choices"]:
+                err_msg = body.get("error", {}).get("message", str(body))
+                raise RuntimeError(f"OpenRouter returned no choices: {err_msg}")
             text = body["choices"][0]["message"]["content"].strip()
             return text
 
