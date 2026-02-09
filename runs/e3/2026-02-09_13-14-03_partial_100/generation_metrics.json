@@ -1,0 +1,38 @@
+{
+  "base": {
+    "EM_loose": 0.0417,
+    "avg_generation_ms": 1147.7,
+    "n_queries": 120,
+    "n_answered": 120
+  },
+  "oracle": {
+    "EM_loose": 0.7167,
+    "avg_generation_ms": 1349.5,
+    "n_queries": 120,
+    "n_answered": 120
+  },
+  "e3_mixed_tau07": {
+    "EM_loose": 0.55,
+    "avg_generation_ms": 1190.9,
+    "n_queries": 120,
+    "n_answered": 117,
+    "citation_precision": 0.6046,
+    "citation_recall": 0.4809
+  },
+  "e3_mixed_tau05": {
+    "EM_loose": 0.5667,
+    "avg_generation_ms": 1169.5,
+    "n_queries": 120,
+    "n_answered": 120,
+    "citation_precision": 0.5931,
+    "citation_recall": 0.4592
+  },
+  "e3_mixed_tau03": {
+    "EM_loose": 0.55,
+    "avg_generation_ms": 1185.9,
+    "n_queries": 120,
+    "n_answered": 120,
+    "citation_precision": 0.5756,
+    "citation_recall": 0.4663
+  }
+}

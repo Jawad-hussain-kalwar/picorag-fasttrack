@@ -10,7 +10,6 @@ Usage:
 import argparse
 import json
 import platform
-import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -255,6 +254,7 @@ def _run_generation_mode(
             chunk_text = oracle[qid]["doc_chunk"]
             messages = build_oracle_prompt(question["query"], chunk_text)
         elif mode == "mixed":
+            assert retrieval_results is not None
             chunks = retrieval_results[i]["documents"]
             messages = build_mixed_prompt(question["query"], chunks)
         else:

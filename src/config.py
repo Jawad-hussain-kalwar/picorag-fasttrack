@@ -61,7 +61,7 @@ OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "google/gemma-3-4b-it")
 OPENROUTER_TIMEOUT_SECONDS = 60.0
 OPENROUTER_MAX_TOKENS = 300
 OPENROUTER_TEMPERATURE = 0.2
-OPENROUTER_RATE_LIMIT = int(os.getenv("OPENROUTER_RATE_LIMIT", "600"))
+OPENROUTER_RATE_LIMIT = int(os.getenv("OPENROUTER_RATE_LIMIT", "2000"))
 
 TOP_K = 3
 
@@ -85,10 +85,11 @@ VOYAGE_API_KEY = os.getenv("VOYAGE_API_KEY", "")
 # --- E3 experiment settings ---
 # --- Judge settings ---
 JUDGE_MODEL = os.getenv("JUDGE_MODEL", "z-ai/glm-4.7-flash")
-JUDGE_RATE_LIMIT = int(os.getenv("JUDGE_RATE_LIMIT", "600"))
+JUDGE_RATE_LIMIT = int(os.getenv("JUDGE_RATE_LIMIT", "2000"))
 
 # --- E3 experiment settings ---
-E3_THRESHOLDS = [0.3, 0.5, 0.7]
+E3_THRESHOLDS = [0.75, 0.8, 0.85, 0.9]
 E3_ABSTAIN_MESSAGE = "Not enough evidence in knowledge base"
-E3_LOCAL_BEST_CONFIG = "1_vector_minilm"  # placeholder, update after E2
-E3_LOCAL_BEST_K = 3                        # placeholder
+E3_LOCAL_BEST_CONFIG = "5_vector_qwen3"
+E3_LOCAL_BEST_K = 5
+E3_N_UNANSWERABLE = 20

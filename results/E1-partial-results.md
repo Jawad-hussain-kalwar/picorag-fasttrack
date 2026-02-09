@@ -1,7 +1,7 @@
 # E1 Partial Results — Vanilla Local RAG Baseline
 
 **Run:** `2026-02-08_15-46-40_partial_100`
-**Model:** `google/gemma-3-4b-it:free` (via OpenRouter)
+**Model:** `google/gemma-3-4b-it`
 **Dataset:** MIRAGE partial subset (100 questions, 500 chunks)
 **k values:** {3, 5, 10}
 
@@ -17,12 +17,11 @@
 | MRR | 0.82 | 0.83 | 0.83 |
 
 - **Index time:** 0.06s (500 chunks)
-- **Retrieval time:** 24.4s (100 queries at k=10)
 
 ## Generation Metrics
 
 | Mode | EM_loose | EM_strict | F1 | Avg latency (ms) |
-|------|----------|-----------|------|-------------------|
+|------|----------|-----------|----|-------------------|
 | Base (closed-book) | 0.05 | 0.00 | 0.065 | 3,740 |
 | Oracle (gold context) | 0.82 | 0.09 | 0.409 | 3,450 |
 | Mixed k=3 | 0.72 | 0.04 | 0.296 | 4,250 |
@@ -44,7 +43,7 @@
 
 ### Retrieval is strong
 
-The embedding model (all-MiniLM-L6-v2 via ChromaDB ONNX) retrieves effectively on MIRAGE's compact pool. Recall@3=0.94 means a gold chunk appears in the top 3 for 94% of queries. At k=10, recall is perfect. MRR~0.83 indicates the gold chunk typically appears in position 1 or 2. This is a solid retrieval baseline with no hybrid or reranking tricks.
+The embedding model (all-MiniLM-L6-v2) retrieves effectively on MIRAGE's compact pool. Recall@3=0.94 means a gold chunk appears in the top 3 for 94% of queries. At k=10, recall is perfect. MRR~0.83 indicates the gold chunk typically appears in position 1 or 2. This is a solid retrieval baseline.
 
 ### Base vs Oracle gap reveals model capability
 
@@ -97,17 +96,11 @@ EM_loose already captures the right signal: "does the gold answer appear as a su
 
 **Mitigation:** A concise-answer instruction has been added to all three MIRAGE prompts in `src/generate.py` ("Answer concisely in a few words."). This would bring F1 closer to EM_loose by reducing output verbosity. However, since F1 is fundamentally mismatched for generative evaluation, it is **dropped from E2–E5 metrics** — EM_loose is the primary generation quality metric going forward.
 
-### Latency observations
-
-- Base/Oracle: ~3.5s per query (rate-limited to 20 req/min = 3s minimum).
-- Mixed k=10: ~10.7s — significantly higher, likely due to larger prompt (10 chunks) causing longer generation and more rate-limit retries.
-- The latency numbers are dominated by OpenRouter rate limits, not local compute. For efficiency profiling, local Ollama would give truer numbers.
-
 ---
 
 ## LLM-as-Judge: Faithfulness & Groundedness
 
-**Judge model:** `z-ai/glm-4.5-air:free` (via OpenRouter, tool-calling mode)
+**Judge model:** `z-ai/glm-4.5-air`
 **Scope:** Mixed mode only — faithfulness is only meaningful when retrieval provides noisy contexts (base has no contexts, oracle has gold context by definition).
 
 ### Method
@@ -117,7 +110,7 @@ Each prediction is evaluated against its retrieved contexts by a second LLM acti
 - **Faithfulness** (RAGAS-style): The judge identifies factual claims in the answer and checks each against the retrieved contexts. Score = supported claims / total claims. Range [0, 1].
 - **Groundedness** (NVIDIA-style): Holistic assessment of whether the answer's content is taken from the contexts. Scale: 0 = not grounded, 1 = partially grounded, 2 = fully grounded. Normalized to [0, 1] by dividing by 2.
 
-Structured output is enforced via OpenRouter tool-calling (`submit_judgment` tool with `tool_choice: auto`). This avoids regex parsing of free-text responses.
+Structured output is enforced via tool-calling (`submit_judgment` tool with `tool_choice: auto`). This avoids regex parsing of free-text responses.
 
 ### Results
 
@@ -154,8 +147,6 @@ Structured output is enforced via OpenRouter tool-calling (`submit_judgment` too
 
 **Low-faithfulness cases remain rare (2–4%).** These are predictions where the model introduced substantial unsupported claims — likely cases where retrieval returned relevant-looking but incorrect chunks, and the model confabulated details. The count is consistently small across all k values.
 
-**Judge failure rate is ~6–12%.** Null results come from judge tool-call failures (the model returning text instead of calling `submit_judgment`) and skipped error predictions. For k=3, 6 of 10 nulls came from the initial run before a prompt fix; the corrected prompt achieves ~4–6% failure rate, acceptable for a free-tier judge model.
-
 **Combined with MIRAGE metrics, the picture is consistent:**
 - NV ≈ 0.00 + CM = 0.00 + Faithfulness = 0.93–0.94 → the model does not hallucinate or misinterpret context at any k value.
 - CA = 0.67 + EM_loose = 0.72 + Groundedness = 0.92–0.93 → when the model answers correctly, it does so by faithfully using retrieved evidence, not by relying on parametric knowledge.
@@ -170,13 +161,11 @@ The E1 runner covers the core spec: vector-only retrieval with k sweep, all 3 MI
 - **Chunk size sweep {256, 512}:** Not applicable — MIRAGE provides pre-chunked documents.
 - **Faithfulness/Groundedness:** Covered for k={3, 5, 10} via LLM-as-judge (`run_judge.py`).
 - **Citation Precision/Recall:** Requires citation extraction from generated text.
-- **Detailed efficiency metrics (TTFT, peak RAM/VRAM):** Not captured; latency is dominated by API rate limits anyway.
+- **Detailed efficiency metrics (TTFT, peak RAM/VRAM):** Not captured.
 
 None of these gaps affect the core E1 conclusions.
 
 ## Recommendations for Full Run
 
 1. **Use k=3 as primary configuration** — best EM with lowest latency.
-2. **Expect ~5–6 hours** for the full 7,560-question run at current rate limits (37,800 total API calls).
-3. **Consider increasing OPENROUTER_RATE_LIMIT** if the key supports higher throughput, or run with a paid model tier.
-4. **EM_loose is the primary metric** for this model — EM_strict and F1 are too sensitive to output verbosity.
+2. **EM_loose is the primary metric** for this model — EM_strict and F1 are too sensitive to output verbosity.

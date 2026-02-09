@@ -1,0 +1,30 @@
+{
+  "e3_mixed_tau09": {
+    "EM_loose": 0.0,
+    "avg_generation_ms": 1996.0,
+    "n_queries": 120,
+    "n_answered": 1,
+    "citation_precision": 0.0,
+    "citation_recall": 0.0
+  },
+  "oracle": {
+    "EM_loose": 0.7167,
+    "avg_generation_ms": 1314.5,
+    "n_queries": 120,
+    "n_answered": 120
+  },
+  "base": {
+    "EM_loose": 0.0417,
+    "avg_generation_ms": 1140.9,
+    "n_queries": 120,
+    "n_answered": 120
+  },
+  "e3_mixed_tau08": {
+    "EM_loose": 0.5167,
+    "avg_generation_ms": 812.1,
+    "n_queries": 120,
+    "n_answered": 97,
+    "citation_precision": 0.6175,
+    "citation_recall": 0.4423
+  }
+}

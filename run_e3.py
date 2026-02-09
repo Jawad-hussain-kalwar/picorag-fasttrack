@@ -28,6 +28,7 @@ from src.config import (
     E3_ABSTAIN_MESSAGE,
     E3_LOCAL_BEST_CONFIG,
     E3_LOCAL_BEST_K,
+    E3_N_UNANSWERABLE,
     E3_THRESHOLDS,
     JUDGE_MODEL,
     MIRAGE_COLLECTION_NAME,
@@ -66,6 +67,9 @@ from src.mirage_loader import (
     select_partial_subset,
 )
 from src.retrieve import get_client, get_collection, index_mirage_pool, search
+
+MAX_GEN_RETRIES = 5
+MAX_JUDGE_RETRIES = 5
 
 
 # ---------------------------------------------------------------------------
@@ -145,7 +149,7 @@ def _load_generation_from_disk(
 
     # Mixed per threshold
     for tau in thresholds:
-        tau_label = f"{tau:.1f}".replace(".", "")
+        tau_label = f"{tau:.2f}".replace(".", "")
         gen_name = f"e3_mixed_tau{tau_label}"
         gen_path = _jsonl_path(run_dir, gen_name)
         if gen_path.exists():
@@ -153,6 +157,88 @@ def _load_generation_from_disk(
             print(f"  Loaded {len(gen_results[gen_name])} {gen_name} results")
 
     return gen_results
+
+
+# ---------------------------------------------------------------------------
+# E2 reuse: copy retrieval + base + oracle from E2 run
+# ---------------------------------------------------------------------------
+
+def _find_latest_e2_run(mode_label: str) -> Path | None:
+    """Find the latest E2 run directory matching mode."""
+    e2_dir = RUNS_DIR / "e2"
+    if not e2_dir.exists():
+        return None
+    # For smoke tests, look for partial runs (E2 has no smoke mode for matching)
+    # For partial, match partial_100
+    search_label = "partial_100" if "partial" in mode_label else mode_label
+    candidates = sorted(
+        [d for d in e2_dir.iterdir() if d.is_dir() and search_label in d.name],
+        reverse=True,
+    )
+    return candidates[0] if candidates else None
+
+
+def _reuse_e2_results(
+    e2_run: Path,
+    e3_run: Path,
+    n_eval: int,
+) -> None:
+    """Copy reusable E2 base + oracle generation into E3 run directory.
+
+    Retrieval is NOT copied — it gets re-run for all questions including
+    unanswerable ones added for E3.
+    """
+    # 1. Base generation results
+    e2_base = e2_run / "samples" / "e2_base.jsonl"
+    e3_base = _jsonl_path(e3_run, "e3_base")
+    if e2_base.exists() and not e3_base.exists():
+        e3_base.parent.mkdir(parents=True, exist_ok=True)
+        rows = _load_jsonl(e2_base)
+        rows = rows[:n_eval]
+        with open(e3_base, "w", encoding="utf-8") as f:
+            for r in rows:
+                r["mode"] = "base"
+                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+        print(f"  Reused E2 base generation: {len(rows)} queries")
+
+    # 2. Oracle generation results
+    e2_oracle = e2_run / "samples" / "e2_oracle.jsonl"
+    e3_oracle = _jsonl_path(e3_run, "e3_oracle")
+    if e2_oracle.exists() and not e3_oracle.exists():
+        e3_oracle.parent.mkdir(parents=True, exist_ok=True)
+        rows = _load_jsonl(e2_oracle)
+        rows = rows[:n_eval]
+        with open(e3_oracle, "w", encoding="utf-8") as f:
+            for r in rows:
+                r["mode"] = "oracle"
+                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+        print(f"  Reused E2 oracle generation: {len(rows)} queries")
+
+
+# ---------------------------------------------------------------------------
+# Unanswerable questions: gold chunks NOT in indexed pool
+# ---------------------------------------------------------------------------
+
+def _select_unanswerable_questions(
+    full_dataset: list[dict],
+    indexed_query_ids: set[str],
+    n: int,
+) -> list[dict]:
+    """Select n questions whose gold chunks are NOT in the indexed pool.
+
+    These questions have valid answers in MIRAGE, but retrieving from the
+    indexed subset will only return distractors. Perfect for testing
+    the abstention gate.
+    """
+    import copy
+    candidates = [q for q in full_dataset if q["query_id"] not in indexed_query_ids]
+    candidates.sort(key=lambda q: q["query_id"])
+    selected = []
+    for q in candidates[:n]:
+        q_copy = copy.deepcopy(q)
+        q_copy["unanswerable_in_corpus"] = True
+        selected.append(q_copy)
+    return selected
 
 
 # ---------------------------------------------------------------------------
@@ -212,17 +298,30 @@ def run_retrieval_phase(
     fetch_n = max(k, E2_RERANK_TOP_N) if "rerank" in method else k
 
     # Build indices based on method — reuse E2 ChromaDB collection if it exists
+    is_qwen3 = "qwen3" in config_id
     if method in ("vector", "hybrid", "hybrid+rerank"):
-        collection_name = f"{MIRAGE_COLLECTION_NAME}_e2"
-        client = get_client(str(CHROMA_PERSIST_DIR))
-        collection = get_collection(client, collection_name)
-        existing = collection.count()
-        if existing >= len(index_doc_pool):
-            print(f"  ChromaDB: reusing E2 index ({existing} chunks already indexed)")
-        else:
+        if is_qwen3:
+            from src.embed_openrouter import (
+                index_mirage_with_custom_embeddings,
+                search_with_custom_embeddings,
+            )
+            qwen3_collection_name = f"{MIRAGE_COLLECTION_NAME}_e2_qwen3"
             t0 = time.perf_counter()
-            indexed = index_mirage_pool(collection, index_doc_pool)
-            print(f"  ChromaDB: {indexed} chunks indexed in {time.perf_counter()-t0:.1f}s")
+            qwen3_indexed = index_mirage_with_custom_embeddings(
+                index_doc_pool, qwen3_collection_name, batch_size=50,
+            )
+            print(f"  Qwen3 ChromaDB: {qwen3_indexed} chunks indexed in {time.perf_counter()-t0:.1f}s")
+        else:
+            collection_name = f"{MIRAGE_COLLECTION_NAME}_e2"
+            client = get_client(str(CHROMA_PERSIST_DIR))
+            collection = get_collection(client, collection_name)
+            existing = collection.count()
+            if existing >= len(index_doc_pool):
+                print(f"  ChromaDB: reusing E2 index ({existing} chunks already indexed)")
+            else:
+                t0 = time.perf_counter()
+                indexed = index_mirage_pool(collection, index_doc_pool)
+                print(f"  ChromaDB: {indexed} chunks indexed in {time.perf_counter()-t0:.1f}s")
 
     if method in ("bm25", "hybrid", "hybrid+rerank"):
         from src.bm25 import bm25_search, build_bm25_index
@@ -237,7 +336,11 @@ def run_retrieval_phase(
         qid = question["query_id"]
         query_text = question["query"]
 
-        if method == "vector":
+        if method == "vector" and is_qwen3:
+            result = search_with_custom_embeddings(
+                qwen3_collection_name, query_text, n_results=fetch_n,
+            )
+        elif method == "vector":
             result = search(collection, query_text, n_results=fetch_n)
         elif method == "bm25":
             result = bm25_search(bm25_index, bm25_pool, query_text, n_results=fetch_n)
@@ -294,7 +397,7 @@ def run_retrieval_phase(
         for rec in results:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
-    if method in ("vector", "hybrid", "hybrid+rerank"):
+    if method in ("vector", "hybrid", "hybrid+rerank") and not is_qwen3:
         del client
 
     return results
@@ -355,17 +458,27 @@ def _run_generation_mode(
                 chunk_text = oracle[qid]["doc_chunk"]
                 messages = build_oracle_prompt(question["query"], chunk_text)
             elif mode == "mixed":
+                assert retrieval_results is not None
                 chunks = retrieval_results[i]["documents"]
                 messages = build_mixed_prompt_cited(question["query"], chunks)
             else:
                 raise ValueError(f"Unknown mode: {mode}")
 
             t0 = time.perf_counter()
-            try:
-                prediction = call_openrouter(messages)
-            except RuntimeError as exc:
-                errors += 1
-                prediction = f"ERROR: {exc}"
+            prediction = None
+            for gen_attempt in range(1, MAX_GEN_RETRIES + 1):
+                try:
+                    prediction = call_openrouter(messages)
+                    break
+                except RuntimeError as exc:
+                    if gen_attempt < MAX_GEN_RETRIES:
+                        wait = min(2 ** gen_attempt, 30)
+                        print(f"    Gen error (attempt {gen_attempt}/{MAX_GEN_RETRIES}), "
+                              f"retrying in {wait}s: {exc}")
+                        time.sleep(wait)
+                    else:
+                        errors += 1
+                        prediction = f"ERROR: {exc}"
             gen_ms = int((time.perf_counter() - t0) * 1000)
 
         answers = question["answer"]
@@ -423,7 +536,7 @@ def run_generation_phase(
     tasks.append(("base", "e3_base", None, "base", None, gate_method))
     tasks.append(("oracle", "e3_oracle", None, "oracle", None, gate_method))
     for tau in thresholds:
-        tau_label = f"{tau:.1f}".replace(".", "")
+        tau_label = f"{tau:.2f}".replace(".", "")
         gen_name = f"e3_mixed_tau{tau_label}"
         tasks.append((gen_name, gen_name, retrieval_results, "mixed", tau, gate_method))
 
@@ -433,11 +546,11 @@ def run_generation_phase(
     all_gen: dict[str, list[dict]] = {}
     with ThreadPoolExecutor(max_workers=n_workers) as executor:
         futures = {}
-        for key, name, ret_res, mode, tau, gm in tasks:
+        for key, name, ret_res, mode, tau_val, gm in tasks:
             future = executor.submit(
                 _run_generation_mode,
                 name, eval_dataset, oracle, ret_res, run_dir, mode,
-                threshold=tau, gate_method=gm,
+                threshold=tau_val, gate_method=gm,
             )
             futures[future] = key
 
@@ -470,7 +583,7 @@ def run_aggregation_phase(
     # --- Gate metrics per threshold ---
     gate_metrics: dict = {}
     for tau in thresholds:
-        tau_label = f"{tau:.1f}".replace(".", "")
+        tau_label = f"{tau:.2f}".replace(".", "")
         gen_key = f"e3_mixed_tau{tau_label}"
         results = gen_results.get(gen_key, [])
         if not results:
@@ -549,7 +662,7 @@ def run_aggregation_phase(
 
     mirage_metrics: dict = {}
     for tau in thresholds:
-        tau_label = f"{tau:.1f}".replace(".", "")
+        tau_label = f"{tau:.2f}".replace(".", "")
         gen_key = f"e3_mixed_tau{tau_label}"
         mixed_results = gen_results.get(gen_key, [])
         if not mixed_results:
@@ -576,7 +689,7 @@ def run_aggregation_phase(
     # --- Judge metrics (load from disk if Phase D has run) ---
     judge_all: dict = {}
     for tau in thresholds:
-        tau_label = f"{tau:.1f}".replace(".", "")
+        tau_label = f"{tau:.2f}".replace(".", "")
         judge_path = _jsonl_path(run_dir, f"judge_tau{tau_label}")
         if judge_path.exists():
             rows = _load_jsonl(judge_path)
@@ -599,101 +712,46 @@ def run_aggregation_phase(
 # Phase D: Judge
 # ---------------------------------------------------------------------------
 
-def _judge_one_threshold(
-    tau: float,
-    run_dir: Path,
-    ret_by_qid: dict[str, dict],
-) -> tuple[str, dict] | None:
-    """Judge one threshold. Returns (judge_key, agg_dict) or None."""
-    tau_label = f"{tau:.1f}".replace(".", "")
-    gen_name = f"e3_mixed_tau{tau_label}"
-    gen_path = _jsonl_path(run_dir, gen_name)
 
-    if not gen_path.exists():
-        print(f"  Skipping tau={tau}: generation file not found")
-        return None
-
-    gen_rows = _load_jsonl(gen_path)
-    total = len(gen_rows)
-
-    judge_name = f"judge_tau{tau_label}"
-    judge_path = _jsonl_path(run_dir, judge_name)
-    judged = _load_checkpoint(judge_path)
-
-    if len(judged) >= total:
-        print(f"  tau={tau}: already complete ({total}/{total})")
-    elif len(judged) > 0:
-        print(f"  tau={tau}: resuming from {len(judged)}/{total}")
-    else:
-        print(f"  tau={tau}: judging {total} predictions")
-
-    skipped = 0
-    errors = 0
-
-    for g in gen_rows:
-        qid = g["query_id"]
-        if qid in judged:
-            continue
-
-        if g.get("abstained", False):
-            skipped += 1
-            row = {
-                "query_id": qid,
-                "faithfulness": None, "groundedness": None,
-                "answer_relevance": None, "semantic_correctness": None,
-                "judge_raw": "SKIPPED_ABSTAINED",
-            }
-            _append_jsonl(judge_path, row)
-            judged[qid] = row
-            continue
-
-        if g["prediction"].startswith("ERROR:"):
-            skipped += 1
-            row = {
-                "query_id": qid,
-                "faithfulness": None, "groundedness": None,
-                "answer_relevance": None, "semantic_correctness": None,
-                "judge_raw": "SKIPPED_ERROR_PREDICTION",
-            }
-            _append_jsonl(judge_path, row)
-            judged[qid] = row
-            continue
-
-        ret = ret_by_qid.get(qid)
-        contexts = ret["documents"] if ret else []
-
-        result = call_judge(
-            question=g["query"],
-            contexts=contexts,
-            prediction=g["prediction"],
-            gold_answers=g.get("gold_answers"),
-        )
-
-        row = {
+def _judge_single_query(
+    tau_label: str,
+    qid: str,
+    g: dict,
+    contexts: list[str],
+    judge_path: Path,
+) -> dict:
+    """Judge a single query. Returns the judge row dict."""
+    if g.get("abstained", False):
+        return {
             "query_id": qid,
-            "faithfulness": result["faithfulness"],
-            "groundedness": result["groundedness"],
-            "answer_relevance": result["answer_relevance"],
-            "semantic_correctness": result["semantic_correctness"],
-            "judge_raw": result["raw"],
+            "faithfulness": None, "groundedness": None,
+            "answer_relevance": None, "semantic_correctness": None,
+            "judge_raw": "SKIPPED_ABSTAINED",
         }
-        _append_jsonl(judge_path, row)
-        judged[qid] = row
 
-        if result["faithfulness"] is None:
-            errors += 1
+    if g["prediction"].startswith("ERROR:"):
+        return {
+            "query_id": qid,
+            "faithfulness": None, "groundedness": None,
+            "answer_relevance": None, "semantic_correctness": None,
+            "judge_raw": "SKIPPED_ERROR_PREDICTION",
+        }
 
-        done = len(judged)
-        if done % 10 == 0 or done == total:
-            print(f"    tau={tau}: {done}/{total} judged "
-                  f"({errors} parse errors, {skipped} skipped)")
+    result = call_judge(
+        question=g["query"],
+        contexts=contexts,
+        prediction=g["prediction"],
+        gold_answers=g.get("gold_answers"),
+    )
 
-    all_rows = _load_jsonl(judge_path)
-    agg = aggregate_judge_scores(all_rows)
-    print(f"  tau={tau} done — faith={agg['faithfulness']}  "
-          f"ground={agg['groundedness']}  relev={agg['answer_relevance']}  "
-          f"correct={agg['semantic_correctness']}  judged={agg['n_judged']}")
-    return (f"tau={tau}", agg)
+    return {
+        "query_id": qid,
+        "faithfulness": result["faithfulness"],
+        "groundedness": result["groundedness"],
+        "answer_relevance": result["answer_relevance"],
+        "semantic_correctness": result["semantic_correctness"],
+        "judge_raw": result["raw"],
+    }
 
 
 def run_judge_phase(
@@ -701,33 +759,92 @@ def run_judge_phase(
     thresholds: list[float],
     k: int,
 ) -> None:
-    """Run LLM-as-Judge on mixed-mode predictions for each threshold (parallel)."""
+    """Run LLM-as-Judge on mixed-mode predictions, parallelized per-query."""
     print(f"\n{'='*60}")
-    print(f"PHASE D: LLM-as-Judge (parallel, {JUDGE_MODEL})")
+    print(f"PHASE D: LLM-as-Judge (per-query parallel, {JUDGE_MODEL})")
     print(f"{'='*60}")
 
     retrieval_results = _load_retrieval_from_disk(run_dir, k)
     ret_by_qid = {r["query_id"]: r for r in retrieval_results}
 
-    n_workers = min(8, len(thresholds))
-    print(f"  {len(thresholds)} judge tasks, {n_workers} workers")
+    # Collect all (tau, qid, gen_row, contexts) tasks across all thresholds
+    judge_tasks: list[tuple[str, float, str, dict, list[str], Path]] = []
+    for tau in thresholds:
+        tau_label = f"{tau:.2f}".replace(".", "")
+        gen_name = f"e3_mixed_tau{tau_label}"
+        gen_path = _jsonl_path(run_dir, gen_name)
+        if not gen_path.exists():
+            print(f"  Skipping tau={tau}: generation file not found")
+            continue
 
-    judge_all: dict = {}
+        judge_path = _jsonl_path(run_dir, f"judge_tau{tau_label}")
+        judged = _load_checkpoint(judge_path)
+        gen_rows = _load_jsonl(gen_path)
+
+        for g in gen_rows:
+            qid = g["query_id"]
+            if qid in judged:
+                continue
+            ret = ret_by_qid.get(qid)
+            contexts = ret["documents"] if ret else []
+            judge_tasks.append((tau_label, tau, qid, g, contexts, judge_path))
+
+    if not judge_tasks:
+        print("  All judge tasks already complete")
+        # Still aggregate and save
+        judge_all: dict = {}
+        for tau in thresholds:
+            tau_label = f"{tau:.2f}".replace(".", "")
+            judge_path = _jsonl_path(run_dir, f"judge_tau{tau_label}")
+            if judge_path.exists():
+                rows = _load_jsonl(judge_path)
+                agg = aggregate_judge_scores(rows)
+                judge_all[f"tau={tau}"] = agg
+                print(f"  tau={tau}: faith={agg['faithfulness']}  "
+                      f"ground={agg['groundedness']}  judged={agg['n_judged']}")
+        if judge_all:
+            _save_json(run_dir / "judge_metrics.json", judge_all)
+        return
+
+    n_workers = min(12, len(judge_tasks))
+    print(f"  {len(judge_tasks)} judge queries, {n_workers} workers")
+
+    completed_count = 0
+    errors = 0
     with ThreadPoolExecutor(max_workers=n_workers) as executor:
-        futures = {
-            executor.submit(_judge_one_threshold, tau, run_dir, ret_by_qid): tau
-            for tau in thresholds
-        }
+        futures = {}
+        for tau_label, tau, qid, g, contexts, judge_path in judge_tasks:
+            future = executor.submit(
+                _judge_single_query, tau_label, qid, g, contexts, judge_path,
+            )
+            futures[future] = (tau_label, tau, qid, judge_path)
+
         for future in as_completed(futures):
-            tau = futures[future]
+            tau_label, tau, qid, judge_path = futures[future]
             try:
-                result = future.result()
-                if result:
-                    key, agg = result
-                    judge_all[key] = agg
+                row = future.result()
+                _append_jsonl(judge_path, row)
+                completed_count += 1
+                if row["faithfulness"] is None and "SKIPPED" not in row.get("judge_raw", ""):
+                    errors += 1
+                if completed_count % 10 == 0 or completed_count == len(judge_tasks):
+                    print(f"    Judged {completed_count}/{len(judge_tasks)} ({errors} errors)")
             except Exception as exc:
-                print(f"  ERROR judging tau={tau}: {exc}")
+                print(f"  ERROR judging tau={tau} qid={qid}: {exc}")
                 traceback.print_exc()
+
+    # Aggregate per threshold
+    judge_all = {}
+    for tau in thresholds:
+        tau_label = f"{tau:.2f}".replace(".", "")
+        judge_path = _jsonl_path(run_dir, f"judge_tau{tau_label}")
+        if judge_path.exists():
+            rows = _load_jsonl(judge_path)
+            agg = aggregate_judge_scores(rows)
+            judge_all[f"tau={tau}"] = agg
+            print(f"  tau={tau} done — faith={agg['faithfulness']}  "
+                  f"ground={agg['groundedness']}  relev={agg['answer_relevance']}  "
+                  f"correct={agg['semantic_correctness']}  judged={agg['n_judged']}")
 
     if judge_all:
         _save_json(run_dir / "judge_metrics.json", judge_all)
@@ -802,9 +919,21 @@ def main() -> int:
         q["query_id"]: index_oracle[q["query_id"]]
         for q in eval_dataset if q["query_id"] in index_oracle
     }
+    n_answerable = len(eval_dataset)
+
+    # Add unanswerable questions (gold chunks NOT in indexed pool)
+    n_unanswerable = E3_N_UNANSWERABLE if not args.smoke else min(3, E3_N_UNANSWERABLE)
+    indexed_qids = {q["query_id"] for q in index_dataset}
+    unanswerable_qs = _select_unanswerable_questions(dataset, indexed_qids, n_unanswerable)
+    eval_dataset = eval_dataset + unanswerable_qs
+    # Add oracle data for unanswerable questions (they have gold context in MIRAGE)
+    for q in unanswerable_qs:
+        qid = q["query_id"]
+        if qid in oracle:
+            eval_oracle[qid] = oracle[qid]
 
     mode_label = (
-        f"smoke_{n_eval}" if args.smoke
+        f"smoke_{n_answerable}" if args.smoke
         else "full" if args.full
         else f"partial_{E2_EVAL_N}"
     )
@@ -818,7 +947,7 @@ def main() -> int:
     print(f"Gate method: {gate_method}")
     print(f"Thresholds: {E3_THRESHOLDS}")
     print(f"Index chunks: {len(index_doc_pool)}")
-    print(f"Eval questions: {len(eval_dataset)}")
+    print(f"Eval questions: {n_answerable} answerable + {len(unanswerable_qs)} unanswerable = {len(eval_dataset)}")
     print(f"Model: {OPENROUTER_MODEL}")
     print(f"Phase: {args.phase}")
 
@@ -838,6 +967,14 @@ def main() -> int:
 
     run_dir.mkdir(parents=True, exist_ok=True)
 
+    # Reuse E2 base + oracle generation (retrieval is re-run for all questions)
+    e2_run = _find_latest_e2_run(mode_label)
+    if e2_run:
+        print(f"\nReusing E2 base+oracle from: {e2_run}")
+        _reuse_e2_results(e2_run, run_dir, n_answerable)
+    else:
+        print("\nNo E2 run found for reuse — will compute from scratch")
+
     # Save config
     config = {
         "experiment": "E3",
@@ -852,6 +989,8 @@ def main() -> int:
         "max_tokens": OPENROUTER_MAX_TOKENS,
         "n_index_chunks": len(index_doc_pool),
         "n_eval_questions": len(eval_dataset),
+        "n_answerable": n_answerable,
+        "n_unanswerable": len(unanswerable_qs),
         "timestamp": timestamp,
     }
     _save_json(run_dir / "config.json", config)

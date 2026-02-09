@@ -1,0 +1,26 @@
+{
+  "tau=0.3": {
+    "faithfulness": 0.8697,
+    "groundedness": 0.8824,
+    "answer_relevance": 0.8445,
+    "semantic_correctness": 0.6555,
+    "n_judged": 119,
+    "n_total": 120
+  },
+  "tau=0.5": {
+    "faithfulness": 0.8613,
+    "groundedness": 0.8739,
+    "answer_relevance": 0.8361,
+    "semantic_correctness": 0.6681,
+    "n_judged": 119,
+    "n_total": 120
+  },
+  "tau=0.7": {
+    "faithfulness": 0.8841,
+    "groundedness": 0.8957,
+    "answer_relevance": 0.8217,
+    "semantic_correctness": 0.6826,
+    "n_judged": 115,
+    "n_total": 120
+  }
+}

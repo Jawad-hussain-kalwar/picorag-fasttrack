@@ -1,5 +1,7 @@
 """Custom embeddings via OpenRouter API (e.g. Qwen3-Embedding-4B)."""
 
+from typing import Any, cast
+
 import os
 import threading
 import time
@@ -161,7 +163,7 @@ def index_mirage_with_custom_embeddings(
         batch = doc_pool[start : start + batch_size]
         texts = [c["doc_chunk"] for c in batch]
         ids = [f"{c['mapped_id']}:{start + i}" for i, c in enumerate(batch)]
-        metadatas = [
+        metadatas: list[dict[str, Any]] = [
             {
                 "mapped_id": c["mapped_id"],
                 "doc_name": c["doc_name"],
@@ -176,7 +178,7 @@ def index_mirage_with_custom_embeddings(
             ids=ids,
             embeddings=embeddings,
             documents=texts,
-            metadatas=metadatas,
+            metadatas=metadatas,  # type: ignore[arg-type]
         )
 
         if (start + batch_size) % 500 < batch_size:
@@ -196,7 +198,7 @@ def search_with_custom_embeddings(
     n_results: int,
     embed_fn=None,
     persist_dir: str | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Search a custom-embedded ChromaDB collection.
 
     Embeds the query with embed_fn, then queries ChromaDB with query_embeddings.
@@ -208,8 +210,8 @@ def search_with_custom_embeddings(
     collection = get_custom_collection(collection_name, persist_dir)
     query_embedding = embed_fn([query])[0]
 
-    return collection.query(
+    return cast(dict[str, Any], collection.query(
         query_embeddings=[query_embedding],
         n_results=n_results,
         include=["documents", "metadatas", "distances"],
-    )
+    ))

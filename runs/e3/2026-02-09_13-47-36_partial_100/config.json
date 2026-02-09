@@ -1,0 +1,22 @@
+{
+  "experiment": "E3",
+  "mode": "partial_100",
+  "local_best_config": "5_vector_qwen3",
+  "local_best_k": 5,
+  "gate_method": "cosine",
+  "thresholds": [
+    0.75,
+    0.8,
+    0.85,
+    0.9
+  ],
+  "model": "google/gemma-3-4b-it",
+  "judge_model": "z-ai/glm-4.7-flash",
+  "temperature": 0.2,
+  "max_tokens": 300,
+  "n_index_chunks": 2500,
+  "n_eval_questions": 120,
+  "n_answerable": 100,
+  "n_unanswerable": 20,
+  "timestamp": "2026-02-09_13-47-36"
+}

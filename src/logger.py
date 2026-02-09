@@ -186,7 +186,7 @@ class _Timer:
         self.start = time.perf_counter()
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> bool:
+    def __exit__(self, exc_type, exc, tb) -> None:
         elapsed_ms = int((time.perf_counter() - self.start) * 1000)
         if exc is None:
             self.logger.info(self.message, event=self.event, elapsed_ms=elapsed_ms)
@@ -197,7 +197,7 @@ class _Timer:
                 elapsed_ms=elapsed_ms,
                 reason=str(exc),
             )
-        return False
+        return None
 
 
 def _env_bool(name: str, default: bool) -> bool:

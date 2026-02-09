@@ -89,7 +89,6 @@ def ndcg_at_k(retrieved_supports: list[int], k: int) -> float:
     )
     # IDCG: best possible ranking (all golds first)
     n_gold = sum(1 for s in retrieved_supports if s == 1)
-    ideal = sorted(retrieved_supports[:k], reverse=True)
     # Pad with remaining golds if needed
     ideal_full = [1] * min(n_gold, k) + [0] * max(0, k - n_gold)
     idcg = sum(
@@ -192,7 +191,7 @@ def selective_accuracy(
     answered_mask: list[bool],
 ) -> float:
     """EM_loose only over answered (non-abstained) queries."""
-    correct = 0
+    correct: float = 0.0
     total = 0
     for pred, golds, answered in zip(predictions, gold_answers, answered_mask):
         if answered:

@@ -1,0 +1,34 @@
+{
+  "tau=0.75": {
+    "faithfulness": 0.9579,
+    "groundedness": 0.9526,
+    "answer_relevance": 0.9211,
+    "semantic_correctness": 0.8421,
+    "n_judged": 95,
+    "n_total": 120
+  },
+  "tau=0.8": {
+    "faithfulness": 0.9452,
+    "groundedness": 0.9452,
+    "answer_relevance": 0.9041,
+    "semantic_correctness": 0.7945,
+    "n_judged": 73,
+    "n_total": 120
+  },
+  "tau=0.85": {
+    "faithfulness": 0.9565,
+    "groundedness": 0.9565,
+    "answer_relevance": 0.8913,
+    "semantic_correctness": 0.8261,
+    "n_judged": 23,
+    "n_total": 120
+  },
+  "tau=0.9": {
+    "faithfulness": 1.0,
+    "groundedness": 1.0,
+    "answer_relevance": 0.5,
+    "semantic_correctness": 0.5,
+    "n_judged": 1,
+    "n_total": 120
+  }
+}

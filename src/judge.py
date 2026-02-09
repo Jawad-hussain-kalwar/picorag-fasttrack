@@ -62,14 +62,31 @@ SUBMIT_TOOL: dict = {
 }
 
 SYSTEM_PROMPT = (
-    "You are a strict, impartial evaluator. You MUST respond by calling the "
-    "submit_judgment tool. Do NOT write any text — ONLY call the tool.\n\n"
-    "Your job is to evaluate an Answer against Retrieved Contexts and Gold Answers.\n\n"
-    "RULES:\n"
-    "- For faithfulness/groundedness: ONLY judge based on Retrieved Contexts.\n"
-    "- For answer_relevance: judge whether the Answer addresses the Question.\n"
-    "- For semantic_correctness: compare the Answer to the Gold Answers.\n"
-    "- You MUST use the submit_judgment tool. Do NOT write a text reply."
+    "You are an expert AI Judge evaluating a RAG system's performance. "
+    "Your responsibility is to analyze the provided Question, Retrieved Contexts, Gold Answers, and Predicted Answer, "
+    "and then score the Answer quality.\n\n"
+
+    "CRITICAL REQUIREMENT: You MUST submit your evaluation ONLY by calling the `submit_judgment` tool. "
+    "Do NOT write any natural language text, reasoning, or explanations. "
+    "Any text output is a failure. You MUST use the tool.\n\n"
+
+    "You have one tool `submit_judgment` which requires these 4 parameters:\n"
+    "  - faithfulness (float 0.0-1.0): Ratio of claims supported by Contexts.\n"
+    "  - groundedness (int 0-2): 0=Not grounded, 1=Partial, 2=Fully grounded in Contexts.\n"
+    "  - answer_relevance (int 0-2): 0=Irrelevant, 1=Partial, 2=Fully addresses Question.\n"
+    "  - semantic_correctness (int 0-2): 0=Incorrect, 1=Partial, 2=Correct vs Gold Answers.\n\n"
+
+    "Analyze the input data and determine these scores. "
+    "Then, IMMEDIATELY call `submit_judgment` with your determined values. "
+    "Do not add any text before or after the tool call. "
+    "CALL THE TOOL NOW."
+)
+
+CORRECTION_MSG = (
+    "ERROR: You wrote text instead of calling the submit_judgment tool. "
+    "This is wrong. You MUST call the submit_judgment function with the "
+    "4 required parameters (faithfulness, groundedness, answer_relevance, "
+    "semantic_correctness). Do NOT write text. Call the tool NOW."
 )
 
 USER_TEMPLATE = """\
@@ -187,20 +204,90 @@ def parse_judge_response(body: dict) -> dict:
         return null_result(raw)
 
 
+def _make_judge_request(
+    messages: list[dict],
+    headers: dict,
+    max_http_retries: int = 3,
+) -> dict | None:
+    """Make one judge API call with HTTP-level retries.
+
+    Returns response body dict on success, None on persistent failure.
+    """
+    global _last_call_time
+
+    min_interval = 60.0 / JUDGE_RATE_LIMIT
+
+    payload = {
+        "model": JUDGE_MODEL,
+        "messages": messages,
+        "temperature": JUDGE_TEMPERATURE,
+        "max_tokens": JUDGE_MAX_TOKENS,
+        "tools": [SUBMIT_TOOL],
+        "tool_choice": "auto",
+    }
+
+    for attempt in range(1, max_http_retries + 1):
+        with _rate_lock:
+            elapsed = time.monotonic() - _last_call_time
+            if elapsed < min_interval:
+                time.sleep(min_interval - elapsed)
+            _last_call_time = time.monotonic()
+        try:
+            with httpx.Client(timeout=OPENROUTER_TIMEOUT_SECONDS) as client:
+                response = client.post(
+                    f"{OPENROUTER_BASE_URL}/chat/completions",
+                    headers=headers,
+                    json=payload,
+                )
+
+            if response.status_code == 429:
+                wait = min(2 ** attempt * 5, 60)
+                log.warning(f"Rate limited ({JUDGE_MODEL}), waiting {wait}s",
+                            event="warning", attempt=attempt)
+                time.sleep(wait)
+                continue
+
+            if response.status_code != 200:
+                if attempt < max_http_retries:
+                    wait = 2 ** attempt
+                    log.warning(f"API error {response.status_code}, retrying in {wait}s",
+                                event="warning", attempt=attempt)
+                    time.sleep(wait)
+                    continue
+                log.error(f"Judge API failed ({response.status_code}): {response.text}",
+                          event="error")
+                return None
+
+            return response.json()
+
+        except httpx.TimeoutException:
+            if attempt < max_http_retries:
+                log.warning(f"Timeout, retrying ({attempt}/{max_http_retries})",
+                            event="warning")
+                time.sleep(2 ** attempt)
+                continue
+            log.error("Judge request timed out after all retries", event="error")
+            return None
+
+    return None
+
+
 def call_judge(
     question: str,
     contexts: list[str],
     prediction: str,
     gold_answers: list[str] | None = None,
-    max_retries: int = 3,
+    max_tool_retries: int = 5,
 ) -> dict:
     """Call the judge model via OpenRouter tool-calling.
+
+    Uses multi-turn conversation retry: if the model responds with text
+    instead of a tool call, sends back its response with a correction
+    message and retries immediately (no delay).
 
     Returns dict with faithfulness, groundedness, answer_relevance,
     semantic_correctness, and raw fields.
     """
-    global _last_call_time
-
     api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set.")
@@ -218,67 +305,34 @@ def call_judge(
     )
 
     merged_content = f"{SYSTEM_PROMPT}\n\n{user_msg}"
-
-    payload = {
-        "model": JUDGE_MODEL,
-        "messages": [{"role": "user", "content": merged_content}],
-        "temperature": JUDGE_TEMPERATURE,
-        "max_tokens": JUDGE_MAX_TOKENS,
-        "tools": [SUBMIT_TOOL],
-        "tool_choice": "auto",
-    }
+    messages: list[dict] = [{"role": "user", "content": merged_content}]
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
 
-    min_interval = 60.0 / JUDGE_RATE_LIMIT
+    for tool_attempt in range(1, max_tool_retries + 1):
+        body = _make_judge_request(messages, headers)
+        if body is None:
+            return null_result("API_FAILED")
 
-    for attempt in range(1, max_retries + 1):
-        with _rate_lock:
-            elapsed = time.monotonic() - _last_call_time
-            if elapsed < min_interval:
-                time.sleep(min_interval - elapsed)
-            _last_call_time = time.monotonic()
+        result = parse_judge_response(body)
+        if result["faithfulness"] is not None:
+            return result
+
+        # Model returned text instead of tool call — add correction
+        assistant_text = ""
         try:
-            with httpx.Client(timeout=OPENROUTER_TIMEOUT_SECONDS) as client:
-                response = client.post(
-                    f"{OPENROUTER_BASE_URL}/chat/completions",
-                    headers=headers,
-                    json=payload,
-                )
+            assistant_text = body["choices"][0]["message"].get("content", "") or ""
+        except (KeyError, IndexError):
+            pass
 
-            if response.status_code == 429:
-                wait = min(2 ** attempt * 5, 60)
-                log.warning(f"Rate limited ({JUDGE_MODEL}), waiting {wait}s", event="warning", attempt=attempt)
-                time.sleep(wait)
-                continue
+        if tool_attempt < max_tool_retries:
+            messages.append({"role": "assistant", "content": assistant_text or "..."})
+            messages.append({"role": "user", "content": CORRECTION_MSG})
+            # No delay — retry immediately with conversation context
 
-            if response.status_code != 200:
-                if attempt < max_retries:
-                    wait = 2 ** attempt
-                    log.warning(
-                        f"API error {response.status_code}, retrying in {wait}s",
-                        event="warning",
-                        attempt=attempt,
-                    )
-                    time.sleep(wait)
-                    continue
-                log.error(f"Judge API failed ({response.status_code}): {response.text}", event="error")
-                return null_result(response.text)
-
-            body = response.json()
-            return parse_judge_response(body)
-
-        except httpx.TimeoutException:
-            if attempt < max_retries:
-                log.warning(f"Timeout, retrying ({attempt}/{max_retries})", event="warning")
-                time.sleep(2 ** attempt)
-                continue
-            log.error("Judge request timed out after all retries", event="error")
-            return null_result("TIMEOUT")
-
-    return null_result("MAX_RETRIES")
+    return null_result("MAX_TOOL_RETRIES")
 
 
 # ---------------------------------------------------------------------------

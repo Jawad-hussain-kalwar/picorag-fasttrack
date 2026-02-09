@@ -366,7 +366,7 @@ def _parse_judge_response(body: dict) -> dict:
 # Retrieval config definitions
 # ---------------------------------------------------------------------------
 
-CONFIGS = [
+CONFIGS: list[dict[str, str | None]] = [
     {"id": "1_vector_minilm", "label": "Vector-only (MiniLM)", "method": "vector", "embed": "minilm"},
     {"id": "2_bm25", "label": "BM25-only", "method": "bm25", "embed": None},
     {"id": "3_hybrid_minilm", "label": "Hybrid RRF (MiniLM)", "method": "hybrid", "embed": "minilm"},
@@ -443,6 +443,7 @@ def run_retrieval_phase(
     for cfg in CONFIGS:
         cfg_id = cfg["id"]
         cfg_label = cfg["label"]
+        assert isinstance(cfg_id, str)
 
         # Skip Qwen3 configs if unavailable
         if cfg["embed"] == "qwen3" and not qwen3_available:
@@ -1156,6 +1157,7 @@ def main() -> int:
         loaded: dict[str, dict[int, list[dict]]] = {}
         for cfg in CONFIGS:
             cfg_id = cfg["id"]
+            assert isinstance(cfg_id, str)
             cfg_k_results: dict[int, list[dict]] = {}
             all_present = True
             for k in E2_K_VALUES:

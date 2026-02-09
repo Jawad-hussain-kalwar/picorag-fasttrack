@@ -67,7 +67,10 @@
       "Bash(\".venv\\\\Scripts\\\\python.exe\" -m ruff check run_e3.py src/judge.py)",
       "Bash(\".venv\\\\Scripts\\\\python.exe\" -m mypy run_e3.py src/judge.py --ignore-missing-imports)",
       "Bash(git stash:*)",
-      "Bash(\".venv\\\\Scripts\\\\python.exe\" -m mypy run_e3.py --ignore-missing-imports)"
+      "Bash(\".venv\\\\Scripts\\\\python.exe\" -m mypy run_e3.py --ignore-missing-imports)",
+      "Bash(\".venv\\\\Scripts\\\\python.exe\" -m ruff check:*)",
+      "Bash(ls \"D:\\\\Thesis\\\\picorag-fasttrack\\\\runs\\\\e2\"\" 2>/dev/null || echo \"No e2 dir \")",
+      "Bash(python3:*)"
     ]
   }
 }

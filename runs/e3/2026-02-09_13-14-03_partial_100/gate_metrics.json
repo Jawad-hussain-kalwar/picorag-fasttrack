@@ -1,0 +1,38 @@
+{
+  "tau=0.3": {
+    "selective_accuracy": 0.55,
+    "coverage": 1.0,
+    "auprc": 0.6237,
+    "ece": 0.2528,
+    "overall_em_loose": 0.55,
+    "n_answered": 120,
+    "n_abstained": 0,
+    "n_total": 120,
+    "citation_precision": 0.5756,
+    "citation_recall": 0.4663
+  },
+  "tau=0.5": {
+    "selective_accuracy": 0.5667,
+    "coverage": 1.0,
+    "auprc": 0.6538,
+    "ece": 0.2361,
+    "overall_em_loose": 0.5667,
+    "n_answered": 120,
+    "n_abstained": 0,
+    "n_total": 120,
+    "citation_precision": 0.5931,
+    "citation_recall": 0.4592
+  },
+  "tau=0.7": {
+    "selective_accuracy": 0.5641,
+    "coverage": 0.975,
+    "auprc": 0.6102,
+    "ece": 0.2528,
+    "overall_em_loose": 0.55,
+    "n_answered": 117,
+    "n_abstained": 3,
+    "n_total": 120,
+    "citation_precision": 0.6046,
+    "citation_recall": 0.4809
+  }
+}
