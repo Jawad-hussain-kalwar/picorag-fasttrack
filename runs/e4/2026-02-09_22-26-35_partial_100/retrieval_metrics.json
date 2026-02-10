@@ -1,0 +1,16 @@
+{
+  "local": {
+    "recall@5": 0.9417,
+    "precision@5": 0.3683,
+    "ndcg@5": 0.8268,
+    "mrr": 0.8092,
+    "n_queries": 120
+  },
+  "online": {
+    "recall@5": 0.9417,
+    "precision@5": 0.3683,
+    "ndcg@5": 0.8268,
+    "mrr": 0.8092,
+    "n_queries": 120
+  }
+}

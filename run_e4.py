@@ -226,11 +226,12 @@ def run_retrieval_phase(
         index_mirage_with_custom_embeddings,
     )
 
-    embed_fn = partial(embed_texts_openrouter, model=embed_model, batch_size=25)
+    embed_batch = 10 if "8b" in embed_model else 25
+    embed_fn = partial(embed_texts_openrouter, model=embed_model, batch_size=embed_batch)
     print(f"  Indexing {len(index_doc_pool)} chunks into '{collection_name}'...", flush=True)
     t0 = time.perf_counter()
     n_indexed = index_mirage_with_custom_embeddings(
-        index_doc_pool, collection_name, embed_fn=embed_fn, batch_size=25,
+        index_doc_pool, collection_name, embed_fn=embed_fn, batch_size=embed_batch,
     )
     print(f"  ChromaDB: {n_indexed} chunks in {time.perf_counter()-t0:.1f}s", flush=True)
 
@@ -809,9 +810,12 @@ def main() -> int:
                     print(f"  Reused E3 local retrieval: {len(rows)} queries")
                 break  # only need first match
 
-    # Collection names
+    # Collection names — shared when using the same embed model
     local_collection = f"{MIRAGE_COLLECTION_NAME}_e2_qwen3"
-    online_collection = f"{MIRAGE_COLLECTION_NAME}_e4_online"
+    if OPENROUTER_EMBED_MODEL == E4_ONLINE_EMBED_MODEL:
+        online_collection = local_collection  # share retrieval index
+    else:
+        online_collection = f"{MIRAGE_COLLECTION_NAME}_e4_online"
 
     # Save config
     config = {
@@ -843,20 +847,26 @@ def main() -> int:
     phase = args.phase
 
     if phase in ("retrieval", "all"):
-        # Run local + online retrieval in parallel
-        with ThreadPoolExecutor(max_workers=2) as ret_executor:
-            local_future = ret_executor.submit(
-                run_retrieval_phase,
-                eval_dataset, index_doc_pool, run_dir, k,
-                local_collection, OPENROUTER_EMBED_MODEL, "local",
-            )
-            online_future = ret_executor.submit(
-                run_retrieval_phase,
+        # Run local retrieval
+        local_retrieval = run_retrieval_phase(
+            eval_dataset, index_doc_pool, run_dir, k,
+            local_collection, OPENROUTER_EMBED_MODEL, "local",
+        )
+        if local_collection == online_collection:
+            # Shared embeddings — copy local retrieval as online
+            online_ret_path = run_dir / "retrieval" / f"retrieved_k{k}_online.jsonl"
+            if not online_ret_path.exists():
+                online_ret_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(online_ret_path, "w", encoding="utf-8") as f:
+                    for r in local_retrieval:
+                        f.write(json.dumps(r, ensure_ascii=False) + "\n")
+                print(f"  Shared retrieval: copied local -> online ({len(local_retrieval)} queries)")
+            online_retrieval = local_retrieval
+        else:
+            online_retrieval = run_retrieval_phase(
                 eval_dataset, index_doc_pool, run_dir, k,
                 online_collection, E4_ONLINE_EMBED_MODEL, "online",
             )
-            local_retrieval = local_future.result()
-            online_retrieval = online_future.result()
     else:
         local_retrieval = _load_retrieval_from_disk(run_dir, k, "local")
         online_retrieval = _load_retrieval_from_disk(run_dir, k, "online")

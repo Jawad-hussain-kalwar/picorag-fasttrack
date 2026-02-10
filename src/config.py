@@ -96,6 +96,6 @@ E3_N_UNANSWERABLE = 20
 
 # --- E4 experiment settings ---
 E4_ONLINE_MODEL = "openai/gpt-oss-120b:exacto"
-E4_ONLINE_EMBED_MODEL = "qwen/qwen3-embedding-8b"
+E4_ONLINE_EMBED_MODEL = "qwen/qwen3-embedding-4b"  # same as local — isolate generator variable
 E4_JUDGE_MODEL = "openai/gpt-oss-120b:exacto"
 E4_LOCAL_BEST_THRESHOLD = 0.75

@@ -28,7 +28,7 @@ def embed_texts_openrouter(
     texts: list[str],
     model: str = OPENROUTER_EMBED_MODEL,
     batch_size: int = 50,
-    timeout: float = 180.0,
+    timeout: float = 300.0,
 ) -> list[list[float]]:
     """Embed texts via OpenRouter embeddings API.
 
@@ -63,8 +63,9 @@ def embed_texts_openrouter(
             "input": batch,
         }
 
+        max_retries = 6
         batch_done = False
-        for attempt in range(1, 4):
+        for attempt in range(1, max_retries + 1):
             try:
                 with httpx.Client(timeout=timeout) as client:
                     response = client.post(
@@ -75,12 +76,12 @@ def embed_texts_openrouter(
 
                 if response.status_code == 429:
                     wait = min(2 ** attempt * 5, 60)
-                    print(f"  Embed rate limited ({model}), waiting {wait}s (attempt {attempt}/3)", flush=True)
+                    print(f"  Embed rate limited ({model}), waiting {wait}s (attempt {attempt}/{max_retries})", flush=True)
                     time.sleep(wait)
                     continue
 
                 if response.status_code != 200:
-                    if attempt < 3:
+                    if attempt < max_retries:
                         time.sleep(2 ** attempt)
                         continue
                     raise RuntimeError(
@@ -97,9 +98,10 @@ def embed_texts_openrouter(
                 break
 
             except httpx.TimeoutException:
-                if attempt < 3:
-                    print(f"  Embed timeout ({model}), retrying ({attempt}/3)", flush=True)
-                    time.sleep(2 ** attempt)
+                if attempt < max_retries:
+                    wait = min(2 ** attempt * 3, 60)
+                    print(f"  Embed timeout ({model}), retrying ({attempt}/{max_retries}) wait {wait}s", flush=True)
+                    time.sleep(wait)
                     continue
                 raise RuntimeError("Embed request timed out after all retries")
 

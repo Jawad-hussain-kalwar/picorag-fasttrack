@@ -1,0 +1,22 @@
+{
+  "experiment": "E4",
+  "mode": "partial_100",
+  "local_model": "google/gemma-3-4b-it",
+  "local_embed_model": "qwen/qwen3-embedding-4b",
+  "online_model": "openai/gpt-oss-120b:exacto",
+  "online_embed_model": "qwen/qwen3-embedding-4b",
+  "judge_model": "openai/gpt-oss-120b:exacto",
+  "local_best_config": "5_vector_qwen3",
+  "local_best_k": 5,
+  "local_collection": "mirage_doc_pool_e2_qwen3",
+  "online_collection": "mirage_doc_pool_e2_qwen3",
+  "gate_method": "cosine",
+  "threshold": 0.75,
+  "temperature": 0.2,
+  "max_tokens": 300,
+  "n_index_chunks": 2500,
+  "n_eval_questions": 120,
+  "n_answerable": 100,
+  "n_unanswerable": 20,
+  "timestamp": "2026-02-09_22-26-35"
+}

@@ -1,0 +1,76 @@
+{
+  "local": {
+    "base": {
+      "em_loose": 0.0333,
+      "selective_accuracy": 0.0333,
+      "coverage": 1.0,
+      "avg_generation_ms": 43389.9,
+      "n_total": 120,
+      "n_answered": 120,
+      "n_abstained": 0,
+      "p50_latency_ms": 1374,
+      "p95_latency_ms": 380256
+    },
+    "oracle": {
+      "em_loose": 0.6833,
+      "selective_accuracy": 0.6833,
+      "coverage": 1.0,
+      "avg_generation_ms": 43410.6,
+      "n_total": 120,
+      "n_answered": 120,
+      "n_abstained": 0,
+      "p50_latency_ms": 1421,
+      "p95_latency_ms": 315884
+    },
+    "mixed": {
+      "em_loose": 0.6,
+      "selective_accuracy": 0.5361,
+      "coverage": 0.8083,
+      "avg_generation_ms": 53971.1,
+      "n_total": 120,
+      "n_answered": 97,
+      "n_abstained": 23,
+      "p50_latency_ms": 1481,
+      "p95_latency_ms": 506630,
+      "citation_precision": 0.744,
+      "citation_recall": 0.5692
+    }
+  },
+  "online": {
+    "base": {
+      "em_loose": 0.15,
+      "selective_accuracy": 0.15,
+      "coverage": 1.0,
+      "avg_generation_ms": 57393.0,
+      "n_total": 120,
+      "n_answered": 120,
+      "n_abstained": 0,
+      "p50_latency_ms": 7885,
+      "p95_latency_ms": 470985
+    },
+    "oracle": {
+      "em_loose": 0.7667,
+      "selective_accuracy": 0.7667,
+      "coverage": 1.0,
+      "avg_generation_ms": 45938.1,
+      "n_total": 120,
+      "n_answered": 120,
+      "n_abstained": 0,
+      "p50_latency_ms": 2560,
+      "p95_latency_ms": 327357
+    },
+    "mixed": {
+      "em_loose": 0.7417,
+      "selective_accuracy": 0.7113,
+      "coverage": 0.8083,
+      "avg_generation_ms": 56297.0,
+      "n_total": 120,
+      "n_answered": 97,
+      "n_abstained": 23,
+      "p50_latency_ms": 3196,
+      "p95_latency_ms": 519206,
+      "citation_precision": 0.7165,
+      "citation_recall": 0.5029
+    }
+  }
+}

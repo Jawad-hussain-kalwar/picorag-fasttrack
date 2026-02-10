@@ -1,0 +1,18 @@
+{
+  "local": {
+    "faithfulness": 0.8656,
+    "groundedness": 0.8118,
+    "answer_relevance": 0.8226,
+    "semantic_correctness": 0.6613,
+    "n_judged": 93,
+    "n_total": 120
+  },
+  "online": {
+    "faithfulness": 0.9614,
+    "groundedness": 0.9632,
+    "answer_relevance": 0.9895,
+    "semantic_correctness": 0.8895,
+    "n_judged": 95,
+    "n_total": 120
+  }
+}

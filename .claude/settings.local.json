@@ -78,7 +78,8 @@
       "Bash(\".venv\\\\Scripts\\\\python.exe\" -c \"\nimport json\nrun = ''runs/e4/2026-02-09_17-51-39_smoke_5/samples''\nprint\\(''=== Online Mixed ===''\\)\nwith open\\(f''{run}/e4_online_mixed.jsonl''\\) as f:\n    for line in f:\n        r = json.loads\\(line\\)\n        print\\(f\"\"  EM={r[''em_loose'']}  pred=''{r[''prediction''][:100]}''\"\"\\)\n        print\\(f\"\"    gold={r[''gold_answers'']}\"\"\\)\n\")",
       "Bash(\".venv\\\\Scripts\\\\python.exe\" -c \"\nimport json\nrun = ''runs/e4/2026-02-09_17-57-52_smoke_5/samples''\nprint\\(''=== Online Mixed ===''\\)\nwith open\\(f''{run}/e4_online_mixed.jsonl''\\) as f:\n    for line in f:\n        r = json.loads\\(line\\)\n        print\\(f\"\"  EM={r[''em_loose'']}  pred=''{r[''prediction''][:120]}''\"\"\\)\n\")",
       "Bash(\".venv\\\\Scripts\\\\python.exe\" run_e4.py --partial)",
-      "Bash(\".venv\\\\Scripts\\\\python.exe\" -m ruff check src/embed_openrouter.py run_e4.py)"
+      "Bash(\".venv\\\\Scripts\\\\python.exe\" -m ruff check src/embed_openrouter.py run_e4.py)",
+      "Bash(\".venv\\\\Scripts\\\\python.exe\" run_e4.py --partial --resume)"
     ]
   }
 }
