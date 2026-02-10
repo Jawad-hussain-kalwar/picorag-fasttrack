@@ -1,0 +1,19 @@
+{
+  "experiment": "E5",
+  "mode": "partial_100",
+  "model": "google/gemma-3-4b-it",
+  "embed_model": "qwen/qwen3-embedding-4b",
+  "judge_model": "openai/gpt-oss-120b:exacto",
+  "k": 5,
+  "gate_threshold": 0.75,
+  "max_hops": 2,
+  "agent_workers": 3,
+  "collection_name": "mirage_doc_pool_e2_qwen3",
+  "temperature": 0.2,
+  "max_tokens": 300,
+  "n_index_chunks": 2500,
+  "n_eval_questions": 120,
+  "n_answerable": 100,
+  "n_unanswerable": 20,
+  "timestamp": "2026-02-10_09-37-01"
+}

@@ -79,7 +79,19 @@
       "Bash(\".venv\\\\Scripts\\\\python.exe\" -c \"\nimport json\nrun = ''runs/e4/2026-02-09_17-57-52_smoke_5/samples''\nprint\\(''=== Online Mixed ===''\\)\nwith open\\(f''{run}/e4_online_mixed.jsonl''\\) as f:\n    for line in f:\n        r = json.loads\\(line\\)\n        print\\(f\"\"  EM={r[''em_loose'']}  pred=''{r[''prediction''][:120]}''\"\"\\)\n\")",
       "Bash(\".venv\\\\Scripts\\\\python.exe\" run_e4.py --partial)",
       "Bash(\".venv\\\\Scripts\\\\python.exe\" -m ruff check src/embed_openrouter.py run_e4.py)",
-      "Bash(\".venv\\\\Scripts\\\\python.exe\" run_e4.py --partial --resume)"
+      "Bash(\".venv\\\\Scripts\\\\python.exe\" run_e4.py --partial --resume)",
+      "Bash(\".venv\\\\Scripts\\\\python.exe\" -m mypy src/agent.py src/generate.py src/config.py run_e5.py --ignore-missing-imports)",
+      "Bash(\".venv\\\\Scripts\\\\python.exe\" run_e5.py --smoke 5)",
+      "Bash(\".venv\\\\Scripts\\\\python.exe\" -m ruff check src/agent.py src/generate.py run_e5.py)",
+      "Bash(\".venv\\\\Scripts\\\\python.exe\" -m mypy src/agent.py src/generate.py run_e5.py --ignore-missing-imports)",
+      "Bash(\".venv\\\\Scripts\\\\python.exe\" -m ruff check src/agent.py src/generate.py)",
+      "Bash(\".venv\\\\Scripts\\\\python.exe\" -m mypy src/agent.py src/generate.py --ignore-missing-imports)",
+      "Bash(\".venv\\\\Scripts\\\\python.exe\" -m ruff check src/agent.py)",
+      "Bash(\".venv\\\\Scripts\\\\python.exe\" -m mypy src/agent.py --ignore-missing-imports)",
+      "Bash(\".venv\\\\Scripts\\\\python.exe\" -m ruff check src/generate.py src/agent.py run_e5.py)",
+      "Bash(\".venv\\\\Scripts\\\\python.exe\" -m mypy src/generate.py src/agent.py run_e5.py --ignore-missing-imports)",
+      "Bash(\".venv\\\\Scripts\\\\python.exe\" -c \"\nimport json\npath = __import__\\(''pathlib''\\).Path\\(''runs/e5/2026-02-10_09-28-25_smoke_5/samples/e5_agentic_mixed.jsonl''\\)\nfor line in path.read_text\\(\\).splitlines\\(\\):\n    r = json.loads\\(line\\)\n    m = ''V'' if r[''em_loose''] else ''X''\n    print\\(f\"\"  {m} em={r[''em_loose'']}  abs={r[''abstained'']}  llm={r.get\\(''llm_abstain'',False\\)}  hops={r[''hops'']}  conf={r[''confidence'']:.3f}\"\"\\)\n    print\\(f\"\"    Gold={r[''gold_answers''][0][:30]:30s}  Pred={r[''prediction''][:55]}\"\"\\)\n\")",
+      "Bash(\".venv\\\\Scripts\\\\python.exe\" run_e5.py --partial)"
     ]
   }
 }

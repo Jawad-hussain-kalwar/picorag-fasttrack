@@ -99,3 +99,10 @@ E4_ONLINE_MODEL = "openai/gpt-oss-120b:exacto"
 E4_ONLINE_EMBED_MODEL = "qwen/qwen3-embedding-4b"  # same as local — isolate generator variable
 E4_JUDGE_MODEL = "openai/gpt-oss-120b:exacto"
 E4_LOCAL_BEST_THRESHOLD = 0.75
+
+# --- E5 experiment settings ---
+E5_GATE_THRESHOLD = 0.75
+E5_MAX_HOPS = 2
+E5_K = 5
+E5_AGENT_WORKERS = 3
+E5_JUDGE_MODEL = "openai/gpt-oss-120b:exacto"

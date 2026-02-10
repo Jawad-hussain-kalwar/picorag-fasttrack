@@ -130,6 +130,63 @@ def build_mixed_prompt_cited(question: str, chunks: list[str]) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# E5 prompt builders (hyperoptimised for 4B model)
+# ---------------------------------------------------------------------------
+
+_SYSTEM_E5 = (
+    "You are a helpful assistant. Answer questions using ONLY the provided context.\n"
+    "Give ONLY the answer with citations like [1], [2]. No explanations.\n"
+    "If the answer is NOT in the context, say: Not enough evidence in knowledge base\n\n"
+    "Examples:\n"
+    "Q: Who painted the Mona Lisa?\nA: Leonardo da Vinci [1]\n"
+    "Q: What year did the Titanic sink?\nA: 1912 [2], [3]\n"
+)
+
+
+def build_e5_mixed_prompt(question: str, chunks: list[str]) -> list[dict]:
+    """E5 hyperoptimised mixed prompt for 4B model with abstention."""
+    numbered = "\n".join(f"[{i + 1}] {c}" for i, c in enumerate(chunks))
+    return [
+        {"role": "system", "content": _SYSTEM_E5},
+        {
+            "role": "user",
+            "content": (
+                f"Question : {question}\n\n"
+                f"Context :\n{numbered}\n\n"
+                "Answer concisely: "
+            ),
+        },
+    ]
+
+
+def build_reformulation_prompt(
+    original_query: str,
+    retrieved_snippets: list[str],
+) -> list[dict]:
+    """Build prompt asking model to rephrase query with different keywords."""
+    snippets_block = "\n".join(
+        f"- {s[:200]}" for s in retrieved_snippets[:3]
+    )
+    return [
+        {"role": "system", "content": (
+            "You are a search query rewriter. "
+            "Given a question and some retrieved snippets that were NOT helpful, "
+            "rewrite the question using different keywords, synonyms, or "
+            "alternative phrasing to find better results. "
+            "Output ONLY the rewritten question, nothing else."
+        )},
+        {
+            "role": "user",
+            "content": (
+                f"Original question: {original_query}\n\n"
+                f"Unhelpful snippets:\n{snippets_block}\n\n"
+                "Rewritten question:"
+            ),
+        },
+    ]
+
+
+# ---------------------------------------------------------------------------
 # OpenRouter API caller with rate limiting and retry
 # ---------------------------------------------------------------------------
 

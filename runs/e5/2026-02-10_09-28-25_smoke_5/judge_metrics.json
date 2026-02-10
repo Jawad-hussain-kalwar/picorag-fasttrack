@@ -1,0 +1,8 @@
+{
+  "faithfulness": 1.0,
+  "groundedness": 0.9167,
+  "answer_relevance": 1.0,
+  "semantic_correctness": 0.75,
+  "n_judged": 6,
+  "n_total": 7
+}

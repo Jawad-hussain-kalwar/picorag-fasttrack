@@ -1,0 +1,31 @@
+{
+  "base": {
+    "em_loose": 0.0333,
+    "avg_generation_ms": 43338.9,
+    "n_total": 120,
+    "n_answered": 120,
+    "n_abstained": 0,
+    "p50_latency_ms": 1329,
+    "p95_latency_ms": 380256
+  },
+  "oracle": {
+    "em_loose": 0.6833,
+    "avg_generation_ms": 43408.0,
+    "n_total": 120,
+    "n_answered": 120,
+    "n_abstained": 0,
+    "p50_latency_ms": 1403,
+    "p95_latency_ms": 315884
+  },
+  "agentic_mixed": {
+    "em_loose": 0.7167,
+    "avg_generation_ms": 1650.2,
+    "n_total": 120,
+    "n_answered": 89,
+    "n_abstained": 31,
+    "p50_latency_ms": 1231,
+    "p95_latency_ms": 4664,
+    "citation_precision": 0.7865,
+    "citation_recall": 0.573
+  }
+}

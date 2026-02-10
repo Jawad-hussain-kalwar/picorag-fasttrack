@@ -1,0 +1,10 @@
+{
+  "selective_accuracy": 0.8333,
+  "coverage": 0.8571,
+  "auprc": 0.6962,
+  "ece": 0.2801,
+  "threshold": 0.75,
+  "n_answered": 6,
+  "n_abstained": 1,
+  "n_total": 7
+}
