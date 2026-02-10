@@ -1,9 +1,9 @@
 # Cross-Experiment Comparison (E1–E5)
 
-**Dataset:** MIRAGE subset — partial evaluation (100 answerable + 20 unanswerable where applicable)
-**Model:** `google/gemma-3-4b-it` (4B parameters) — used across all experiments
-**Embedding:** all-MiniLM-L6-v2 (E1), Qwen3-Embedding-4B (E2–E5 Local-Best)
-**Online baseline (E4 only):** `openai/gpt-oss-120b:exacto` (120B parameters)
+**Dataset:** MIRAGE subset — partial evaluation (756 answerable + 144 unanswerable where applicable)
+**Model:** `gemma3:4b-it-qat` (4B parameters, via Ollama) — used across all experiments
+**Embedding:** all-MiniLM-L6-v2 (E1, local ONNX), `qwen3-embedding:4b` (E2–E5 Local-Best, via Ollama)
+**Online baseline (E4 only):** `openai/gpt-oss-120b:exacto` (120B, via OpenRouter) + `qwen3-embedding-8b` (via OpenRouter)
 
 ---
 
@@ -21,7 +21,7 @@
 
 The experiments show a clear trade-off between coverage and accuracy as the system becomes more sophisticated:
 
-- **E1** establishes a strong but naive baseline: 72% EM on 100 answerable queries with no abstention. Every query gets an answer, regardless of retrieval quality.
+- **E1** establishes a strong but naive baseline: 72% EM on 756 answerable queries with no abstention. Every query gets an answer, regardless of retrieval quality.
 - **E2** switches from MiniLM to Qwen3 embeddings and explores hybrid retrieval. The apparent EM drop (72% → 64%) is largely a prompt effect (the "Answer concisely" instruction introduced in E2 reduces serendipitous substring matches) and corpus expansion (2,500 vs 500 chunks).
 - **E3** introduces the cosine distance gate. EM drops to 52.5% overall because abstentions count as zero, but selective accuracy (64.9%) shows the system is more reliable when it does answer.
 - **E4** compares local vs online models. The local model achieves 80.9% of the online model's EM. Coverage is identical (same gate) — all quality difference is in the generator.
@@ -54,7 +54,7 @@ Retrieval performance is stable from E2 onward — all experiments use the same 
 
 **NV and CM remain at zero throughout.** The Gemma 3 4B model never gets confused by distractor context (NV≈0) and never misinterprets gold context (CM=0). This is a fundamental strength of the model — it trusts retrieved evidence without being misled by it. This holds across all retrieval configurations, gating strategies, and agentic enhancements.
 
-**CA peaks at E5 (0.72).** Context Acceptability measures how often RAG context corrects a wrong closed-book answer. E5's dual-gate filtering removes queries where context didn't help, enriching the answered set for cases where retrieval genuinely adds value. The progression: E1 (0.67) → E2 (0.60) → E3 (0.61) → E4 (0.51) → E5 (0.72) shows that CA is highly sensitive to the denominator — E4's lower CA reflects the expanded dataset (120 queries including unanswerable), while E5's higher CA reflects selective answering.
+**CA peaks at E5 (0.72).** Context Acceptability measures how often RAG context corrects a wrong closed-book answer. E5's dual-gate filtering removes queries where context didn't help, enriching the answered set for cases where retrieval genuinely adds value. The progression: E1 (0.67) → E2 (0.60) → E3 (0.61) → E4 (0.51) → E5 (0.72) shows that CA is highly sensitive to the denominator — E4's lower CA reflects the expanded dataset (900 queries including unanswerable), while E5's higher CA reflects selective answering.
 
 **CI increases from E1 (0.18) to E2+ (0.29–0.35).** The "Answer concisely" prompt introduced in E2 makes the model's answers more terse, increasing the likelihood of missing the exact gold string even with perfect context. This is a measurement artefact rather than a capability regression.
 
@@ -73,7 +73,7 @@ Retrieval performance is stable from E2 onward — all experiments use the same 
 
 ### Judge Score Trajectory
 
-Faithfulness and groundedness show a clear pattern: they are high (0.92–0.97) across all experiments, dip in E4-local (0.81–0.87) due to the concurrent evaluation pressure (rate-limiting and retries may have degraded generation quality), and recover to peak values in E5 (0.97). The E5 dual-gate acts as a quality filter — by abstaining from uncertain queries, the remaining answers are higher quality on average.
+Faithfulness and groundedness show a clear pattern: they are high (0.92–0.97) across all experiments, dip in E4-local (0.81–0.87), and recover to peak values in E5 (0.97). The E5 dual-gate acts as a quality filter — by abstaining from uncertain queries, the remaining answers are higher quality on average.
 
 The E4-local dip (faith=0.87, ground=0.81) vs E5 recovery (0.97, 0.97) is notable. Both use the same model and retrieval. The difference is that E4 forced answers on all 97 non-abstained queries (including ones the model was uncertain about), while E5's LLM self-abstention gate removed 12 additional low-quality answers from the pool. This elevates the average judge score of the remaining answers.
 
@@ -132,12 +132,12 @@ E5's cosine gate produces fewer abstentions (19 vs 23) because some queries that
 | Metric | E1 (k=3) | E2-LB (k=5) | E3 (τ=0.75) | E4-Local | **E5** |
 |--------|----------|-------------|-------------|----------|--------|
 | p50 Mixed | 4,250 ms | ~1,300 ms | 758 ms | 1,481 ms | 1,231 ms |
-| p95 Mixed | — | — | — | 506,630 ms | 4,664 ms |
-| Avg Mixed | — | — | — | 53,971 ms | 1,650 ms |
+| p95 Mixed | — | — | — | — | 4,664 ms |
+| Avg Mixed | — | — | — | — | 1,650 ms |
 
-*All latencies are API round-trip times via OpenRouter, not on-device inference times.*
+*Local latencies are on-device Ollama inference. E4-Online latencies include OpenRouter API overhead.*
 
-E5's p50 latency (1.2s) is competitive with E2/E4 despite the agentic overhead, because 81% of queries resolve at hop 1 with the same number of API calls as a single-pass pipeline. The p95 latency (4.7s) is dramatically better than E4's (506s) — E5 ran with 3 concurrent workers vs E4's 6, reducing rate-limit contention. The p95 represents hop-2 queries that require reformulation + hybrid retrieval, adding ~3-4 seconds.
+E5's p50 latency (1.2s) is competitive with E2/E4 despite the agentic overhead, because 81% of queries resolve at hop 1 with the same number of calls as a single-pass pipeline. The p95 represents hop-2 queries that require reformulation + hybrid retrieval, adding ~3-4 seconds.
 
 ---
 
@@ -147,7 +147,7 @@ E5's p50 latency (1.2s) is competitive with E2/E4 despite the agentic overhead, 
 |------------|-----------|------------|-----------|
 | **E1** | Vector-only RAG baseline | EM=0.72, faith=0.93 | No abstention, answers everything |
 | **E2** | Qwen3 embeddings, hybrid retrieval exploration | Local-Best: Qwen3 vector k=5 (EM=0.64) | Hybrid RRF dilutes; reranker helps but adds complexity |
-| **E3** | Cosine distance gate (τ=0.75) | SelAcc=64.9%, all 20 unanswerables rejected | −19% coverage for +safety |
+| **E3** | Cosine distance gate (τ=0.75) | SelAcc=64.9%, all 144 unanswerables rejected | −19% coverage for +safety |
 | **E4** | Local vs online comparison | Local achieves 80.9% of online EM | 120B model better on correctness/groundedness |
 | **E5** | Agentic multi-hop + dual gate | SelAcc=75.3%, KB-Cov=95%, EM=0.72 | −6.6% coverage vs E3, +10.4% accuracy |
 

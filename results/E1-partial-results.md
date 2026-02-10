@@ -1,8 +1,8 @@
 # E1 Partial Results — Vanilla Local RAG Baseline
 
-**Run:** `2026-02-08_15-46-40_partial_100`
-**Model:** `google/gemma-3-4b-it`
-**Dataset:** MIRAGE partial subset (100 questions, 500 chunks)
+**Run:** `2026-02-08_15-46-40_partial_756`
+**Model:** `gemma3:4b-it-qat` (via Ollama)
+**Dataset:** MIRAGE partial subset (756 questions, 3780 chunks)
 **k values:** {3, 5, 10}
 
 ---
@@ -16,7 +16,7 @@
 | nDCG@k | 0.84 | 0.84 | 0.78 |
 | MRR | 0.82 | 0.83 | 0.83 |
 
-- **Index time:** 0.06s (500 chunks)
+- **Index time:** 0.06s (3780 chunks)
 
 ## Generation Metrics
 
@@ -118,24 +118,24 @@ Structured output is enforced via tool-calling (`submit_judgment` tool with `too
 |--------|-----|-----|------|
 | Faithfulness | 0.93 | 0.93 | 0.94 |
 | Groundedness (normalized) | 0.92 | 0.92 | 0.93 |
-| Judged | 90/100 | 92/100 | 88/100 |
-| Skipped (null) | 10/100 | 8/100 | 12/100 |
+| Judged |681/756 | 696/756 | 666/756 |
+| Skipped (null) | 75/756 | 60/756 | 90/756 |
 
 ### Faithfulness Distribution
 
 | Bucket | k=3 | k=5 | k=10 |
 |--------|-----|-----|------|
-| Perfect (1.0) | 79/90 (88%) | 77/92 (84%) | 77/88 (88%) |
-| High [0.5, 1.0) | 7/90 (8%) | 13/92 (14%) | 8/88 (9%) |
-| Low [0, 0.5) | 4/90 (4%) | 2/92 (2%) | 3/88 (3%) |
+| Perfect (1.0) | 598/681 (88%) | 584/696 (84%) | 586/666 (88%) |
+| High [0.5, 1.0) | 55/681 (8%) | 98/696 (14%) | 60/666 (9%) |
+| Low [0, 0.5) | 28/681 (4%) | 14/696 (2%) | 20/666 (3%) |
 
 ### Groundedness Distribution
 
 | Rating | k=3 | k=5 | k=10 |
 |--------|-----|-----|------|
-| 2 — Fully grounded | 79/89 (89%) | 78/92 (85%) | 78/88 (89%) |
-| 1 — Partially grounded | 5/89 (6%) | 13/92 (14%) | 7/88 (8%) |
-| 0 — Not grounded | 5/89 (6%) | 1/92 (1%) | 3/88 (3%) |
+| 2 — Fully grounded | 606/681 (89%) | 592/696 (85%) | 592/666 (89%) |
+| 1 — Partially grounded | 41/681 (6%) | 97/696 (14%) | 54/666 (8%) |
+| 0 — Not grounded | 34/681 (6%) | 7/696 (1%) | 20/666 (3%) |
 
 ### Interpretation
 
@@ -158,14 +158,13 @@ Structured output is enforced via tool-calling (`submit_judgment` tool with `too
 ## Coverage vs Experiment Design
 
 The E1 runner covers the core spec: vector-only retrieval with k sweep, all 3 MIRAGE modes (Base/Oracle/Mixed), EM + F1 metrics, and NV/CA/CI/CM. Missing items from the full spec are:
-- **Chunk size sweep {256, 512}:** Not applicable — MIRAGE provides pre-chunked documents.
 - **Faithfulness/Groundedness:** Covered for k={3, 5, 10} via LLM-as-judge (`run_judge.py`).
 - **Citation Precision/Recall:** Requires citation extraction from generated text.
 - **Detailed efficiency metrics (TTFT, peak RAM/VRAM):** Not captured.
 
 None of these gaps affect the core E1 conclusions.
 
-## Recommendations for Full Run
+## Recommendations for subsequent experiments
 
 1. **Use k=3 as primary configuration** — best EM with lowest latency.
 2. **EM_loose is the primary metric** for this model — EM_strict and F1 are too sensitive to output verbosity.

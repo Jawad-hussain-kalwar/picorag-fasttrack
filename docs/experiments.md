@@ -1,7 +1,7 @@
 # PicoRAG — Experimental Design
 
-**Version:** 1.0
-**Last Updated:** 2026-02-01
+**Version:** 2.0 (Post-Experiment Revision)
+**Last Updated:** 2026-02-10
 
 ---
 
@@ -9,7 +9,9 @@
 
 ### 1.1 What is PicoRAG?
 
-**PicoRAG** is a lightweight, fully-local Retrieval-Augmented Generation (RAG) framework designed to operate efficiently on resource-constrained personal computers without reliance on cloud infrastructure or external APIs. The system combines Small Language Models (SLMs) with optimized retrieval mechanisms to enable knowledge-grounded text generation on mid-tier hardware.
+**PicoRAG** is a lightweight Retrieval-Augmented Generation (RAG) framework designed for resource-constrained personal computers. The system combines Small Language Models (SLMs) with optimized retrieval mechanisms to enable knowledge-grounded text generation on mid-tier hardware.
+
+*Implementation note:* Local LLM inference (`gemma3:4b-it-qat`) and embedding (`qwen3-embedding:4b`) ran on-device via Ollama throughout E1–E5. Reranking (E2) used `BAAI/bge-reranker-v2-m3` via the FlagEmbedding package, also locally. Only the online comparison pipeline in E4 (`openai/gpt-oss-120b:exacto` for generation, `qwen3-embedding-8b` for retrieval) and the LLM-as-judge evaluations across all experiments were routed through the OpenRouter API. Latency figures for the local pipeline reflect on-device inference times; E4-Online and judge latencies include API round-trip overhead.
 
 ### 1.2 Purpose and Motivation
 
@@ -30,9 +32,9 @@ PicoRAG addresses this gap by demonstrating that **effective RAG can be achieved
 - No specialized accelerators or server infrastructure
 
 **System Constraints:**
-- Fully local, offline operation (except for explicit online baselines)
+- Designed for local, offline operation (local inference via Ollama — see §1.1 note)
 - No Docker/containers required
-- No external vector database services
+- No external vector database services (ChromaDB embedded mode only)
 - Pip-installable components only
 - Text-based RAG (no multimodal or speech systems)
 
@@ -74,7 +76,7 @@ PicoRAG addresses this gap by demonstrating that **effective RAG can be achieved
 **RQ3: Local vs Cloud Viability Threshold**
 *What are the quantifiable performance differences between cloud-based and lightweight local RAG systems across standardized benchmarks, and at what quality threshold does local deployment become practically viable?*
 
-- **Measurable aspects:** Response quality (EM, ROUGE scores), retrieval accuracy (Recall@k, nDCG, MRR), resource efficiency (energy per correct answer, tokens/watt), cost-effectiveness (queries/dollar vs queries/watt), latency profiles (TTFT, p95)
+- **Measurable aspects:** Response quality (EM), retrieval accuracy (Recall@k, nDCG, MRR), latency profiles (p50, p95), LLM-as-judge quality dimensions (Faithfulness, Groundedness, Semantic Correctness), MIRAGE adaptability (NV, CA, CI, CM)
 - **Focus areas:** Local SLM vs online LLM generation quality, retrieval parity, total cost of ownership, acceptable quality degradation for local deployment
 
 ---
@@ -107,7 +109,7 @@ The experimental sequence is designed as a **progressive build-up** where each e
 
 **Fulfilling Objective C** (Evaluate effectiveness vs cloud systems):
 - **E1-E3** establish local system performance envelope
-- **E4** directly compares Local-Best configuration against online cloud LLM (Gemini 2.5 Flash)
+- **E4** directly compares Local-Best configuration against online cloud LLM (`openai/gpt-oss-120b:exacto`)
 - All experiments measure quality, accuracy, and efficiency metrics to quantify trade-offs
 
 ### 3.3 How Experiments Answer Research Questions
@@ -123,9 +125,9 @@ The experimental sequence is designed as a **progressive build-up** where each e
 - **E5** tests hybrid retrieval + reformulation in agentic setting
 
 **Answering RQ3** (Local vs cloud viability):
-- **E4** directly compares Local-Best (from E2) against cloud baseline (Gemini 2.5 Flash)
-- Uses both Mixed (RAG setting) and Oracle (generation ceiling) to isolate retrieval vs generation contributions
-- Quantifies quality gap, efficiency gains, and establishes practical viability threshold
+- **E4** directly compares the full local pipeline (Ollama-based) against a full online pipeline (OpenRouter-based) using `openai/gpt-oss-120b:exacto` (120B parameters) and `qwen3-embedding-8b`
+- Uses both Mixed (RAG setting) and Oracle (generation ceiling) to quantify the local-vs-online quality gap
+- Quantifies quality gap and establishes practical viability threshold
 
 ---
 
@@ -143,8 +145,9 @@ The experimental sequence is designed as a **progressive build-up** where each e
 
 MIRAGE defines three evaluation configurations to isolate different failure modes:
 
-**1. Base (Closed-Book)** — *Not used in our experiments*
+**1. Base (Closed-Book)**
 LLM generates answers using only internal knowledge, no retrieval. Baseline for model capability.
+- **Usage in our experiments:** Used in all experiments to compute MIRAGE RAG adaptability metrics (NV, CA, CI, CM), which require Base results as the closed-book reference point.
 
 **2. Oracle (Generation Ceiling)**
 - **Setup:** Gold supporting context chunks are injected directly into the prompt, bypassing retrieval
@@ -214,11 +217,12 @@ Our evaluation employs a multi-dimensional metrics framework:
 - **Citation Recall:** Fraction of supporting spans that were actually cited by the system
 
 #### 4.4.4 Efficiency Metrics
-- **TTFT (Time-to-First-Token):** Latency from query submission to first generated token (ms)
-- **Latency p50/p95:** Median and 95th percentile end-to-end query latency (ms)
-- **Peak RAM/VRAM:** Maximum memory usage during query processing (MB)
-- **Tokens In/Out:** Number of tokens processed (context) and generated (answer)
+- **Latency p50/p95:** Median and 95th percentile end-to-end query latency (ms). *Note: Local pipeline latencies are on-device inference times via Ollama. E4-Online and judge latencies include OpenRouter API round-trip overhead.*
+- **Peak RAM:** Maximum memory usage during query processing (MB). *Reported in E2 only (453.8 MB).*
 - **Index Build Time:** Offline cost to embed and index document corpus (seconds)
+- **Average Generation Latency:** Mean per-query generation time (ms)
+
+*Metrics not measured:* TTFT, peak VRAM, tokens in/out, energy per correct answer, and cost per correct answer were planned but not captured in the partial evaluation runs. This is acknowledged as a limitation.
 
 #### 4.4.5 MIRAGE RAG Adaptability Metrics
 - **Noise Vulnerability (NV):** Susceptibility to distractors (lower is better)
@@ -233,51 +237,66 @@ Our evaluation employs a multi-dimensional metrics framework:
 - **ECE (Expected Calibration Error):** Calibration quality of decision confidence. Lower ECE indicates predicted confidence better matches observed empirical outcomes (correctness/answerability frequencies).
 - **Success@N:** Fraction of queries answered correctly within ≤N retrieval tool calls (E5)
 
-#### 4.4.7 LLM-as-Judge Reliability Metric (E2-E5)
-- **Human-Judge Cohen's Kappa:** Chance-corrected agreement between human spot-check labels and LLM-as-judge labels. This is the single reliability metric used to validate judge-based metrics (Faithfulness, Groundedness, Answer Relevance, Semantic Answer Correctness).
+#### 4.4.7 LLM-as-Judge Protocol (E1-E5)
+
+Judge-based metrics (Faithfulness, Groundedness, Answer Relevance, Semantic Answer Correctness) are computed via a second LLM acting as an impartial evaluator. Structured output is enforced via tool-calling (`submit_judgment` tool with `tool_choice: auto`) to avoid regex parsing of free-text responses.
+
+**Judge models used (varied across experiments):**
+- **E1:** `z-ai/glm-4.5-air`
+- **E2, E3:** `z-ai/glm-4.7-flash`
+- **E4, E5:** `openai/gpt-oss-120b:exacto`
+
+*Note: Judge model variation across experiments is a construct validity concern. Cross-experiment judge score comparisons should be interpreted cautiously. E4 and E5 share the same judge model and are directly comparable.*
+
+*Planned but not performed:* Human-Judge Cohen's Kappa (stratified spot-check for judge reliability validation) was not conducted in the partial evaluation runs.
 
 ---
 
 ## 5. Shared Experimental Configuration
 
 ### 5.1 Hardware and Operating Environment
-- **Target Hardware:** Mid-tier laptop (7th-gen Intel i7, 16GB RAM, GTX 1050 Ti 4GB VRAM or CPU-only)
-- **Operating System:** Windows/Linux/macOS (cross-platform)
-- **Deployment:** Fully local, no Docker, no external services
+- **Target Hardware:** Mid-tier laptop (7th-gen Intel i7, 16GB RAM)
+- **Operating System:** Windows (MINGW64_NT-10.0-19045)
+- **Inference:** Local LLM inference (`gemma3:4b-it-qat`) and embedding (`qwen3-embedding:4b`) ran on-device via Ollama. ChromaDB (vector store) and BM25 indexing also run locally. The E4 online comparison pipeline and LLM-as-judge calls used OpenRouter API.
+- **Deployment:** No Docker, no external vector database services
 
 ### 5.2 Core Components (Defaults)
 
-**Embedding Model (Baseline):**
-- `all-MiniLM-L6-v2`
-- Alternative model explored in E2 (one small, recent open embedding)
+**Embedding Models:**
+- **Baseline (E1):** `all-MiniLM-L6-v2` (23M parameters) — ChromaDB's built-in ONNX embedding, runs locally in-process
+- **E2–E5 (Local-Best):** `qwen3-embedding:4b` (4B parameters) — runs locally via Ollama
 
 **Vector Store:**
-- **Chroma (embedded mode)** — in-process vector database, pip-installable, no server
-- Supports cosine similarity search, metadata filtering, persistence
+- **ChromaDB 1.4.1 (embedded mode)** — in-process vector database, pip-installable, no server
+- Cosine similarity search (HNSW index), metadata filtering, `PersistentClient`
 
 **Keyword Retriever:**
-- **BM25** algorithm for lexical matching (E2, E5)
-- Implementation via standard libraries (no Elasticsearch/Whoosh server)
+- **BM25** algorithm for lexical matching (E2 comparison, E5 hop-2 fallback)
+- Pure Python implementation via `rank_bm25` library (no Elasticsearch/Whoosh server)
 
 **Hybrid Retrieval:**
-- Score fusion or rank interleaving of BM25 + Vector results (E2, E5)
-- Optional cross-encoder reranking (MiniLM-based, CPU, E2)
+- **Reciprocal Rank Fusion (RRF)** combining BM25 + Vector results (E2, E5 hop-2)
+- **Reranker (E2 only):** `BAAI/bge-reranker-v2-m3` — local cross-encoder reranking via FlagEmbedding package
 
 **Generator (Local SLM):**
-- **gemma2-7b-it** via Ollama (instruction-tuned, 7B parameters)
-- Fixed decoding parameters (temperature, max_tokens, top_p) for reproducibility
+- **`gemma3:4b-it-qat`** (4B parameters) — runs locally via Ollama
+- Fixed decoding parameters for reproducibility
 
 **Generator (Online Baseline):**
-- **Gemini 2.5 Flash** (E4 only) — cloud API for comparison
+- **`openai/gpt-oss-120b:exacto`** (120B parameters, E4 only) — accessed via OpenRouter API
 - Matched decoding parameters to local SLM for fair comparison
 
 ### 5.3 Dataset
-- **Primary:** MIRAGE (Mixed + Oracle settings)
-- **Evaluation Modes:** Mixed (realistic RAG), Oracle (generation ceiling)
+- **Primary:** MIRAGE (Mixed + Oracle + Base settings)
+- **Evaluation Modes:** Mixed (realistic RAG), Oracle (generation ceiling), Base (closed-book, for MIRAGE adaptability metrics)
+- **Evaluation Scale:** All experiments used **partial subsets** for rapid iteration:
+  - **E1:** 100 answerable queries, 500 chunks indexed
+  - **E2–E5:** 100 answerable + 20 unanswerable queries (120 total), 500 questions indexed (2,500 chunks)
+  - Full-scale runs (7,560 queries, 37,800 chunks) were not performed
 
 ### 5.4 Parameter Sweeps (Where Applicable)
-- **Top-k retrieval:** {3, 5, 10}
-- **Selective answering threshold (E3):** {low, mid, high}
+- **Top-k retrieval:** {3, 5, 10} (E1, E2); k=5 fixed for E3–E5 (Local-Best)
+- **Selective answering threshold (E3):** τ ∈ {0.75, 0.80, 0.85, 0.90}
 - **Agentic hops (E5):** ≤2 retrieval rounds
 
 *Note: Chunk size sweep is not applicable — MIRAGE provides pre-chunked documents (37,800 fixed chunks).*
@@ -308,22 +327,25 @@ Establish a clean, reproducible local-only baseline implementing the core RAG pi
 - **Parameter Sweep:** k ∈ {3, 5, 10} (chunk size not applicable — MIRAGE uses pre-chunked documents)
 
 *Generation Configuration:*
-- **Local SLM:** gemma2-7b-it (Ollama)
-- **Prompt Strategy:** Plain question-answering with instruction to provide citations
+- **Generator:** `gemma3:4b-it-qat` (4B parameters, via Ollama)
+- **Prompt Strategy:** Plain question-answering without citation instructions
+- **Judge model:** `z-ai/glm-4.5-air` (via OpenRouter)
 
 **Datasets:**
-- **Primary:** MIRAGE Mixed (realistic RAG evaluation)
-- **Ceiling:** MIRAGE Oracle (generation upper bound with gold contexts)
+- **Subset:** 100 answerable queries, 500 chunks indexed
+- **Modes:** Base (closed-book), Oracle (gold context), Mixed k ∈ {3, 5, 10}
 
-**Metrics:**
-- *Retrieval:* Recall@k, nDCG@k, MRR
-- *Generation:* EM, F1, Faithfulness, Groundedness
-- *Efficiency:* TTFT, latency p50/p95, peak RAM/VRAM, index build time
+**Metrics Reported:**
+- *Retrieval:* Recall@k, Precision@k, nDCG@k, MRR
+- *Generation:* EM_loose, EM_strict, F1 (token-level), Faithfulness, Groundedness
+- *Efficiency:* Average generation latency (ms), index build time (s)
 - *MIRAGE:* NV, CA, CI, CM
 
-*Note: Citation Precision/Recall is deferred to E2–E5, where MIRAGE prompts will include citation instructions. E1 uses plain prompts without citation elicitation.*
+*Note: Citation Precision/Recall is deferred to E2–E5, where MIRAGE prompts include citation instructions. E1 uses plain prompts without citation elicitation.*
 
-*Note: F1 is reported for E1 baseline but is known to penalise generative verbosity (see E1 results). EM_loose is the primary generation quality metric. F1 is dropped from E2–E5.*
+*Note: F1 is reported for E1 baseline but is known to penalise generative verbosity (see E1 results). EM_loose is the primary generation quality metric. F1 is dropped from E2–E5 in favour of EM_loose.*
+
+*Note: TTFT, peak RAM/VRAM, and detailed latency percentiles were not captured in the E1 partial run.*
 
 **Expected Deliverables:**
 1. Baseline metrics table (all k configurations)
@@ -355,44 +377,48 @@ Systematically quantify accuracy/efficiency trade-offs from varying embedding mo
 
 **Experimental Design:**
 
-*Retrieval Configurations (Compared):*
-1. **Vector-only** (E1 baseline, for reference)
-2. **BM25-only** (keyword-based lexical matching)
-3. **Hybrid (BM25 + Vector)** — score fusion or rank interleaving
-4. **Hybrid + Reranker** (optional) — MiniLM cross-encoder on top-50 → top-k (CPU)
+*Retrieval Configurations (6 configs compared):*
+1. **Vector-only (MiniLM)** — all-MiniLM-L6-v2, E1 baseline reference
+2. **BM25-only** — keyword-based lexical matching
+3. **Hybrid RRF (MiniLM)** — Reciprocal Rank Fusion of BM25 + MiniLM vector
+4. **Hybrid + Reranker** — RRF candidates re-scored by `BAAI/bge-reranker-v2-m3` via FlagEmbedding (local)
+5. **Vector-only (Qwen3)** — `qwen3-embedding:4b` via Ollama
+6. **Hybrid RRF (Qwen3)** — RRF of BM25 + Qwen3 vector
 
 *Embedding Models (Compared):*
-1. **all-MiniLM-L6-v2** (E1 baseline)
-2. **One alternative small, recent open embedding** (e.g., newer sentence-transformers model)
+1. **all-MiniLM-L6-v2** (23M parameters, local ONNX via ChromaDB)
+2. **qwen3-embedding:4b** (4B parameters, local via Ollama)
 
 *Fixed Components:*
-- **Vector Store:** Chroma (embedded mode)
-- **Generator:** gemma2-7b-it (Ollama)
-- **Parameter Sweep:** Same k sweep as E1 for fair comparison
+- **Vector Store:** ChromaDB (embedded mode)
+- **Generator:** `gemma3:4b-it-qat` (via Ollama)
+- **Judge model:** `z-ai/glm-4.7-flash` (via OpenRouter)
+- **Parameter Sweep:** k ∈ {3, 5, 10} (same as E1)
 
 **Datasets:**
-- **Primary:** MIRAGE Mixed
-- **Ceiling:** MIRAGE Oracle
+- **Subset:** 500 questions indexed (2,500 chunks), 100 evaluated
+- **Modes:** Base, Oracle, Mixed (all 6 configs × 3 k values)
 
-**Metrics:**
-- *Retrieval:* Recall@k, Precision@k, nDCG@k, MRR (per retrieval method)
-- *Generation:* EM, Answer Relevance, Semantic Answer Correctness, Faithfulness, Groundedness
-- *Citation:* Citation Precision, Citation Recall (MIRAGE prompts include citation instructions from E2 onward)
-- *Judge Reliability:* Human-Judge Cohen's Kappa (from stratified human spot-check sample)
-- *Efficiency:* TTFT, latency p95, peak RAM/VRAM, index build time
-- *MIRAGE:* NV, CA, CI, CM
+**Metrics Reported:**
+- *Retrieval:* Recall@k, Precision@k, nDCG@k, MRR (per config × k)
+- *Generation:* EM_loose, Answer Relevance, Semantic Answer Correctness, Faithfulness, Groundedness
+- *Citation:* Citation Precision, Citation Recall (citation instructions added to prompts from E2 onward)
+- *Efficiency:* Peak RAM (453.8 MB), index build times (MiniLM 0.06s, BM25 1.15s, Qwen3 0.42s), avg generation latency
+- *MIRAGE:* NV, CA, CI, CM (per config × k)
 
-**Expected Deliverables:**
-1. Comparative table: Vector vs BM25 vs Hybrid vs Hybrid+Rerank (retrieval and generation metrics)
-2. Embedding model comparison table
-3. Pareto frontier plot: Quality (EM) vs Latency (p95)
-4. **Selection of "Local-Best"** configuration (retrieval method + embedding model + parameters)
+**Deliverables:**
+1. Comparative table: all 6 configs × 3 k values (retrieval and generation metrics)
+2. Embedding model comparison (MiniLM 23M vs Qwen3 4B)
+3. Citation quality comparison across configs
+4. **Selection of "Local-Best"** configuration via weighted composite rubric
 
-**How to Interpret Results:**
-- **Hybrid vs Vector-only:** Does BM25 fusion improve Recall@k/nDCG? Is latency overhead acceptable?
-- **Reranker impact:** Does cross-encoder reranking justify ~2-5x latency increase with quality gains?
-- **Embedding model trade-off:** Does alternative embedding improve quality or reduce resource usage?
-- **Local-Best selection:** Choose configuration with best quality at acceptable latency (<2s p95) and memory footprint
+**Actual Result:** Local-Best selected as **Config 5 (Vector Qwen3, k=5)** — highest EM_loose (0.64) with simpler architecture than Hybrid+Reranker (0.728 vs 0.715 composite, within 0.02 tiebreaker margin → simpler config preferred).
+
+**Key Findings:**
+- **Hybrid RRF dilutes** rather than enhances vector signal on semantic QA tasks
+- **Qwen3 (4B) embedding outperforms MiniLM (23M)** on ranking quality (nDCG@3: 0.87 vs 0.82)
+- **Reranker provides best pure retrieval** (nDCG@3=0.93) but marginal generation gain (+1 EM point vs Qwen3 vector)
+- **Top configs cluster at 0.60–0.64 EM** — generation quality plateaus once Recall@k > 0.90
 
 The **Local-Best** configuration from this experiment becomes the foundation for E3-E5.
 
@@ -433,28 +459,29 @@ Improve system reliability by implementing a **selective answering gate** that a
 **Experimental Design:**
 
 *System Configuration:*
-- **Base System:** Local-Best pipeline from E2
-- **Decision Gate:** Context sufficiency check before generation
-  - If max retrieval score < τ (threshold) → return "Not enough evidence in knowledge base"
-  - If max retrieval score ≥ τ → proceed with answer generation
-- **Threshold Sweep:** τ ∈ {low, mid, high} (e.g., 0.3, 0.5, 0.7)
+- **Base System:** Local-Best pipeline from E2 (Qwen3 vector, k=5)
+- **Decision Gate:** Cosine distance threshold before generation
+  - If max retrieval similarity < τ → return "Not enough evidence in knowledge base"
+  - If max retrieval similarity ≥ τ → proceed with answer generation
+- **Threshold Sweep:** τ ∈ {0.75, 0.80, 0.85, 0.90}
 
 *Fixed Components:*
-- Retrieval: Local-Best from E2
-- Generator: gemma2-7b-it
+- Retrieval: Local-Best from E2 (Qwen3 vector, k=5)
+- Generator: `gemma3:4b-it-qat` (via Ollama)
+- Judge model: `z-ai/glm-4.7-flash` (via OpenRouter)
 - No additional retrieval hops or external models
 
 **Datasets:**
-- **Primary:** MIRAGE Mixed
-- **Ceiling:** MIRAGE Oracle
+- **Subset:** 120 queries (100 answerable + 20 unanswerable)
+  - Unanswerable queries constructed by excluding gold chunks from index
+- **Modes:** Base, Oracle, Mixed (gated)
 
-**Metrics:**
-- *Decision-Aware:* **Selective Accuracy** (correct among answered), **Coverage** (fraction answered), **AUPRC** (threshold-robust abstention quality), **ECE** (confidence calibration quality)
-- *Generation:* EM, Answer Relevance, Semantic Answer Correctness, Faithfulness, Groundedness (for answered queries)
+**Metrics Reported:**
+- *Decision-Aware:* **Selective Accuracy**, **Coverage**, **AUPRC**, **ECE** (per threshold)
+- *Generation:* EM_loose, Answer Relevance, Semantic Answer Correctness, Faithfulness, Groundedness (answered queries only)
 - *Citation:* Citation Precision, Citation Recall
-- *Judge Reliability:* Human-Judge Cohen's Kappa (from stratified human spot-check sample)
-- *Efficiency:* Latency overhead of decision gate, TTFT, p95
-- *MIRAGE:* NV, CA, CI, CM (for answered queries)
+- *Efficiency:* p50 latency (758ms at τ=0.75 — faster than E2 due to skipped generation on abstained queries)
+- *MIRAGE:* NV, CA, CI, CM (answered queries only)
 
 **Expected Deliverables:**
 1. Accuracy-Coverage curve (plot Selective Accuracy vs Coverage for different τ)
@@ -470,12 +497,14 @@ Improve system reliability by implementing a **selective answering gate** that a
 **Success Criterion:**
 If Selective Accuracy increases by ≥5% at Coverage ≥70% compared to E2 baseline, the decision gate is justified.
 
+**Actual Result:** τ=0.75 selected — Coverage 80.8%, Selective Accuracy 64.9% (+0.9% over E2), all 20 unanswerable queries correctly rejected (100% unanswerable detection). Success criterion partially met: coverage criterion met (80.8% > 70%), but selective accuracy gain was modest (+0.9% vs ≥5% target). The primary value was qualitative: the system now correctly identifies unanswerable queries.
+
 ---
 
 ### E4 — Local vs Online Comparison
 
 **Goal:**
-Directly compare the **Local-Best** pipeline (from E2) against a cloud-based RAG baseline using **Gemini 2.5 Flash** as the generator. Establish the **practical viability threshold** by quantifying the quality gap, efficiency gains, and cost trade-offs between local and online deployment.
+Directly compare the **Local-Best** pipeline (from E2) against a cloud-scale RAG baseline using **`openai/gpt-oss-120b:exacto`** (120B parameters) as the generator. Establish the **practical viability threshold** by quantifying the quality gap between local and online deployment.
 
 **Research Question Mapping:**
 - **RQ3** (Local vs cloud viability): *Primary and exclusive focus* — quantifies performance differences between local SLM and cloud LLM across quality, efficiency, and cost dimensions; determines at what quality threshold local deployment becomes practically viable
@@ -487,30 +516,31 @@ Directly compare the **Local-Best** pipeline (from E2) against a cloud-based RAG
 
 *Configurations Compared:*
 
-1. **Local-Best:**
-   - Retrieval: Local-Best from E2
-   - Generator: gemma2-7b-it (Ollama, local)
-   - All processing on-device
+1. **Local (Gemma 3 4B):**
+   - Retrieval: Local-Best from E2 (`qwen3-embedding:4b` via Ollama, k=5)
+   - Generator: `gemma3:4b-it-qat` (4B parameters, via Ollama)
+   - Gate: Cosine distance τ=0.75 (from E3)
 
-2. **Online Baseline:**
-   - Retrieval: **Identical** to Local-Best (same retrieved contexts)
-   - Generator: Gemini 2.5 Flash (cloud API)
-   - Parity controls: matched decoding parameters (temperature, max_tokens, top_p, stop sequences)
+2. **Online (GPT-oss 120B):**
+   - Retrieval: `qwen3-embedding-8b` (via OpenRouter API, k=5)
+   - Generator: `openai/gpt-oss-120b:exacto` (120B parameters, via OpenRouter API)
+   - Gate: Cosine distance τ=0.75 (same threshold)
+   - Parity controls: matched decoding parameters
 
-*Note:* Online mode is **for comparison only**; core PicoRAG operation remains fully local.
+*Note:* The local pipeline ran entirely on-device via Ollama; the online pipeline ran entirely via OpenRouter API. The two pipelines use different embedding models (4B local vs 8B online) in addition to different generators, so the comparison captures the combined effect of embedding quality and generator capability. Latency differences reflect both model size and local-vs-API overhead.
 
 **Datasets:**
-- **Primary:** MIRAGE Mixed (realistic RAG evaluation)
-- **Ceiling:** MIRAGE Oracle (isolates generator capability; shows Gemini's generation ceiling vs gemma2's)
+- **Subset:** 120 queries (100 answerable + 20 unanswerable), 2,500 chunks
+- **Modes:** Base, Oracle, Mixed (both generators, gated at τ=0.75)
+- **Judge model:** `openai/gpt-oss-120b:exacto` (via OpenRouter)
 
-**Metrics:**
-- *Generation Quality:* EM, Answer Relevance, Semantic Answer Correctness, Faithfulness, Groundedness, Citation Precision/Recall
-- *Retrieval Quality:* Recall@k, nDCG@k (identical for both, since retrieval is shared)
-- *Judge Reliability:* Human-Judge Cohen's Kappa (from stratified human spot-check sample)
-- *Efficiency:*
-  - **Local:** TTFT, p95 latency, **energy per correct answer** (Joules/correct query)
-  - **Online:** TTFT, p95 latency, **cost per correct answer** ($/correct query), **tokens/$**
-- *MIRAGE:* NV, CA, CI, CM (compare local vs online adaptation to noise)
+**Metrics Reported:**
+- *Generation Quality:* EM_loose, Answer Relevance, Semantic Answer Correctness, Faithfulness, Groundedness
+- *Citation:* Citation Precision, Citation Recall
+- *Retrieval Quality:* Recall@5, Precision@5, nDCG@5, MRR (per pipeline — embeddings differ)
+- *Decision-Aware:* Selective Accuracy, Coverage
+- *Latency:* p50, p95, mean (local via Ollama, online via OpenRouter API)
+- *MIRAGE:* NV, CA, CI, CM (both generators, answered queries only)
 
 **Expected Deliverables:**
 1. Side-by-side comparison table: Local-Best vs Online (all metrics)
@@ -525,24 +555,22 @@ Directly compare the **Local-Best** pipeline (from E2) against a cloud-based RAG
   - If Local EM < 70% of Online EM → significant quality degradation
 
 - **Oracle Comparison (Generation Ceiling):**
-  - Gemini Oracle vs gemma2 Oracle shows inherent LLM capability gap
+  - Online Oracle vs Local Oracle shows inherent LLM capability gap
   - If Oracle gap is small but Mixed gap is large → retrieval/noise handling is the bottleneck, not LLM
-
-- **Efficiency Comparison:**
-  - Local TTFT typically 2-5x slower than Online (acceptable for offline use)
-  - Local energy/correct answer should be <10 Wh (feasible on battery)
-  - Online cost/correct answer: baseline for ROI calculation
 
 - **MIRAGE Metrics:**
   - Compare NV (noise vulnerability): Does local SLM degrade more with distractors?
-  - Compare CA (context acceptability): Does Gemini leverage context more effectively?
-
+  - Compare CA (context acceptability): Does the larger model leverage context more effectively?
+  - Compare CI (context insensitivity): Is the smaller model less able to use gold context?
 
 **Viability Threshold:**
 Local deployment is **practically viable** if:
 1. Local EM ≥ 75% of Online EM (acceptable quality degradation)
 2. Local latency p95 < 5 seconds (usable interactive experience)
-3. Local energy/correct answer < Online cost/correct answer (when amortized over 1000 queries)
+
+*Note: Criterion 3 (energy/cost comparison) was not measured in the partial run.*
+
+**Actual Result:** Local Mixed EM (0.60) / Online Mixed EM (0.74) = **80.9%** — **PASS** (exceeds 75% threshold). Latency criterion not directly assessable due to API rate-limit inflation, but p50 of 1.5s suggests compliance in single-query scenarios.
 
 ---
 
@@ -562,35 +590,43 @@ Evaluate an **agentic multi-hop controller** that autonomously orchestrates retr
 **Experimental Design:**
 
 *Agentic Controller:*
-- **Framework:** LangGraph (finite-state machine or message-passing graph)
-- **Agent Policy:**
-  1. **Initial Retrieval:** Call hybrid retrieval tool (BM25+Vector from E2)
-  2. **Sufficiency Check:** If max score < τ → reformulate query and retry
-  3. **Retry (Single):** Reformulated query → call hybrid retrieval again
-  4. **Decision:** If retry max score < τ → return "Not in KB"; else generate answer with citations
-- **Bounded Hops:** ≤2 retrieval tool calls to meet latency constraints
-- **Tools Available:** Vector retriever (Chroma), BM25 retriever, score fusion, query reformulator (SLM-based)
+- **Framework:** Pure Python finite state machine (`src/agent.py`, ~280 lines). No LangGraph, LangChain, or external agent frameworks.
+- **Agent Policy (Dual-Gate State Machine):**
+  1. **Hop 1:** Qwen3 vector search (k=5)
+  2. **Pre-generation gate:** Cosine distance check (τ=0.75)
+     - Pass → GENERATE answer
+     - Fail ↓
+  3. **Reformulate:** LLM rewrites query with different keywords
+  4. **Hop 2:** Vector search (reformulated) + BM25 search → RRF hybrid fusion
+  5. **Pre-generation gate:** Best confidence across both hops
+     - Pass → GENERATE with best hop's context
+     - Fail → ABSTAIN
+  6. **Post-generation gate:** LLM self-abstention detection + empty/citation-only answer detection
+     - If triggered → override to ABSTAIN
+- **Bounded Hops:** ≤2 retrieval rounds to meet latency constraints
+- **Tools Available:** Qwen3 vector retriever (ChromaDB), BM25 retriever, RRF score fusion, LLM query reformulator
 
 *Base Configuration:*
-- Retrieval: Hybrid (BM25+Vector) from E2
-- Generator: gemma2-7b-it
-- All processing local
+- Hop 1 retrieval: Qwen3 vector (k=5, from E2 Local-Best, via Ollama)
+- Hop 2 retrieval: Hybrid vector+BM25 via RRF (fallback only)
+- Generator: `gemma3:4b-it-qat` (via Ollama)
+- Judge model: `openai/gpt-oss-120b:exacto` (via OpenRouter)
 
 **Datasets:**
-- **Primary:** MIRAGE Mixed
+- **Subset:** 120 queries (100 answerable + 20 unanswerable), 2,500 chunks
+- **Modes:** Base, Oracle, Agentic Mixed
 
-**Metrics:**
-- *Retrieval:* Recall@k, nDCG@k (after final retrieval step)
-- *Multi-Hop:* **Success@N** (fraction of queries answered correctly within ≤N tool calls, N ∈ {1, 2})
+**Metrics Reported:**
+- *Retrieval:* Recall@5, Precision@5, nDCG@5, MRR (after final retrieval step)
+- *Multi-Hop:* **Success@N** (N ∈ {1, 2}), hop distribution, avg tool calls per query
 - *Answerability:*
-  - **KB-Coverage Accuracy:** Correctly abstains when KB lacks answer (true negatives)
-  - **False-Negative Rate:** Abstains when KB contains answer (over-conservative)
-- *Decision-Aware Calibration:* **AUPRC** (threshold-robust abstention quality), **ECE** (confidence calibration quality)
-- *Generation:* EM, Answer Relevance, Semantic Answer Correctness, Faithfulness, Groundedness
+  - **KB-Coverage Accuracy:** Correctly abstains when KB lacks answer
+  - **False-Negative Rate:** Abstains when KB contains answer
+- *Decision-Aware:* **Selective Accuracy**, **Coverage**, **AUPRC**, **ECE**
+- *Generation:* EM_loose, Answer Relevance, Semantic Answer Correctness, Faithfulness, Groundedness
 - *Citation:* Citation Precision, Citation Recall
-- *Judge Reliability:* Human-Judge Cohen's Kappa (from stratified human spot-check sample)
-- *Efficiency:* Step count (tool calls per query), TTFT, latency p95, peak RAM
-- *MIRAGE:* NV, CA, CI, CM
+- *Efficiency:* Step count (avg 2.42 tool calls), p50 latency (1,231ms mixed), p95 latency (4,664ms)
+- *MIRAGE:* NV, CA, CI, CM (answered queries only)
 
 **Expected Deliverables:**
 1. Comparison table: E2 (single-shot hybrid) vs E5 (agentic multi-hop)
@@ -618,126 +654,97 @@ Evaluate an **agentic multi-hop controller** that autonomously orchestrates retr
   - Average step count >1.8 → agent frequently retries (possible inefficiency)
   - Latency p95 <5s → acceptable for interactive use
 
-**Success Criterion:**
-Agentic control is beneficial if:
-1. Success@2 > Success@1 by ≥5% (multi-hop improves coverage)
-2. E5 EM ≥ E2 EM + 3% (quality improvement)
-3. Latency p95 < 5 seconds (usable on constrained hardware)
-4. KB-Coverage Accuracy > 75% (reliable abstention)
+**Success Criteria and Actual Results:**
+
+| Criterion | Target | Actual | Verdict |
+|-----------|--------|--------|---------|
+| Success@2 > Success@1 by ≥5% | +5% | +1% (66%→67%) | **NOT MET** — reformulation recovered only 1 query on compact corpus |
+| E5 EM ≥ E2 EM + 3% | +3% | +7.7% (64%→71.7%) | **MET** — driven by dual-gate abstention, not retrieval improvement |
+| Latency p95 < 5 seconds | <5s | 4,664ms | **MET** (marginally) |
+| KB-Coverage Accuracy > 75% | >75% | 95.0% | **MET** — near-perfect unanswerable detection |
+
+**Key finding:** The agent's primary value is not in multi-hop retrieval recovery (marginal) but in its dual-gate abstention mechanism, which achieves 75.3% selective accuracy (+10.4% over E3) by catching "high-confidence retrieval, low-quality answer" scenarios via post-generation self-abstention.
 
 ---
 
 ## 7. Reproducibility Framework
 
-### 7.1 Configuration Schema
+### 7.1 Configuration
 
-Each experimental run is defined by a YAML configuration file with the following schema:
+Each experiment is configured via module-level constants in `src/config.py` and command-line flags on the experiment runners (`run_e1.py` through `run_e5.py`). Key parameters per experiment:
 
-```yaml
-# Dataset Selection
-dataset: mirage_mixed | mirage_oracle
+| Parameter | E1 | E2 | E3 | E4 | E5 |
+|-----------|----|----|----|----|-----|
+| Embedding | MiniLM (local ONNX) | MiniLM + Qwen3 (Ollama) | Qwen3 (Ollama) | Qwen3 (Ollama) / Qwen3-8B (API, online) | Qwen3 (Ollama) |
+| Retrieval | Vector | 6 configs | Vector (LB) | Vector (LB) | Vector + Hybrid fallback |
+| k | {3, 5, 10} | {3, 5, 10} | 5 | 5 | 5 |
+| Gate | None | None | τ ∈ {0.75–0.90} | τ=0.75 | Dual (τ=0.75 + LLM) |
+| Generator | gemma3:4b-it-qat (Ollama) | gemma3:4b-it-qat (Ollama) | gemma3:4b-it-qat (Ollama) | gemma3:4b-it-qat (Ollama) + gpt-oss-120b (API) | gemma3:4b-it-qat (Ollama) |
+| Judge | glm-4.5-air | glm-4.7-flash | glm-4.7-flash | gpt-oss-120b | gpt-oss-120b |
+| Queries | 100 | 100 | 120 | 120 | 120 |
+| Chunks | 500 | 2,500 | 2,500 | 2,500 | 2,500 |
 
-# Embedding Configuration
-embed:
-  model: all-MiniLM-L6-v2 | <alternative-embedding-model>
-
-# Indexing Configuration
-index:
-  type: chroma  # Fixed: Chroma embedded mode only
-  # chunk_size not applicable — MIRAGE provides pre-chunked documents
-
-# Retrieval Configuration
-retrieval:
-  method: vector | bm25 | hybrid | hybrid+rerank
-  k: 3 | 5 | 10
-  reranker: null | miniLM-cross-encoder  # Optional
-
-# Agent Configuration
-agent:
-  mode: off | selective_gate | multihop
-  threshold: 0.3 | 0.5 | 0.7  # For selective_gate, multihop
-  max_hops: 2  # For multihop only
-
-# Generator Configuration
-generator:
-  type: ollama:gemma2-7b-it | online:gemini-2.5-flash
-  temperature: 0.7
-  max_tokens: 512
-  top_p: 0.9
-
-# Reproducibility
-seed: <integer>
-git_commit: <sha>
-notes: <free-text description>
-```
+*Note: No formal YAML config schema was used. Configuration is code-level, tracked via git commits.*
 
 ### 7.2 Artifact Structure
 
 Each experimental run generates outputs in the following directory structure:
 
 ```
-/runs/<timestamp>/<config-hash>/
-├── config.yaml              # Full configuration for this run
-├── metrics.json             # Aggregated metrics with bootstrap CIs
-├── samples.csv              # Per-query results (query, answer, gold, metrics)
-├── sysinfo.json             # Hardware info (CPU, RAM, GPU, OS)
-├── prompts/
-│   ├── system_prompt.txt
-│   └── few_shot_examples.txt (if applicable)
-└── logs/
-    ├── retrieval.log        # Retrieval debug logs
-    └── generation.log       # Generation debug logs
+runs/<experiment>/
+├── <timestamp>_partial_100/
+│   ├── retrieval_results.json    # Per-query retrieval results (chunk IDs, scores)
+│   ├── base_results.json         # Closed-book generation results
+│   ├── oracle_results.json       # Gold-context generation results
+│   ├── mixed_results.json        # RAG generation results (per k or gated)
+│   ├── judge_results.json        # LLM-as-judge evaluation scores
+│   └── metrics_summary.json      # Aggregated metrics
 ```
 
-**Config Hash:**
-SHA-256 hash of canonical config representation (model + embed + index + chunk + k + retriever + agent + generator + seed), ensuring unique runs are disambiguated.
+**Timestamp format:** `YYYY-MM-DD_HH-MM-SS`
 
-**Timestamp:**
-ISO 8601 format: `YYYY-MM-DD_HH-MM-SS`
+### 7.3 Telemetry
 
-### 7.3 Telemetry and Aggregation
+**Per-Query Data (in results JSON files):**
+- Query ID, query text, generated answer, gold answer(s)
+- Retrieval: top-k chunk IDs, cosine distances, Recall@k (binary), nDCG@k
+- Generation: EM_loose (binary), EM_strict (binary), F1 (E1 only)
+- Decision (E3, E5): abstained (boolean), max confidence score
+- Citation: extracted citation indices, precision, recall
+- Latency: generation_ms
+- Judge scores (separate file): Faithfulness, Groundedness, Answer Relevance, Semantic Correctness
 
-
-**Per-Query Telemetry (samples.csv):**
-- Query ID, query text, generated answer, gold answer
-- Retrieval: top-k chunk IDs, scores, Recall@k (binary), nDCG@k
-- Generation: EM (binary), F1 (E1 only), Answer Relevance, Semantic Answer Correctness, Faithfulness, Groundedness
-- Decision/Calibration (E3, E5): abstained (boolean), decision confidence score, calibrated decision probability, decision target label (for AUPRC/ECE computation)
-- Citation: Precision, Recall
-- Reliability (E2-E5): LLM-as-judge label, human spot-check label (sampled subset), agreement flag
-- Latency: retrieval_ms, generation_ms, total_ms
-- Resources: RAM snapshot (MB), VRAM snapshot (MB)
-
-**Aggregated Metrics (metrics.json):**
-- Mean + 95% bootstrap CI for all metrics
-- MIRAGE RAG metrics: NV, CA, CI, CM
-- Efficiency: TTFT p50/p95, latency p50/p95, peak RAM/VRAM
-- System info: OS, CPU, RAM, GPU, Python version, library versions
-
-### 7.4 Reproducibility Checklist
+### 7.4 Reproducibility
 
 To reproduce any experimental run:
-1. Check out the git commit SHA from `config.yaml`
-2. Install dependencies from `requirements.txt` at that commit
-3. Load the config file: `python run_experiment.py --config /runs/<timestamp>/<config-hash>/config.yaml`
-4. Verify identical `config-hash` in output
-5. Compare `metrics.json` (should match within bootstrap CI bounds given seed)
+1. Check out the relevant git commit
+2. Install dependencies: `.venv\Scripts\python.exe -m pip install -r requirements.txt`
+3. Set `OPENROUTER_API_KEY` in `.env`
+4. Run the experiment: `.venv\Scripts\python.exe run_e<N>.py --partial`
+
+*Note: Local results depend on Ollama model versions and hardware. Online results (E4-Online, judges) depend on OpenRouter API availability. Bootstrap confidence intervals were not computed for partial runs.*
 
 ---
 
 ## 8. Summary
 
-This experimental design provides a **comprehensive, progressive evaluation** of PicoRAG's lightweight local RAG framework:
+This experimental design provides a **progressive evaluation** of PicoRAG's RAG framework across five experiments:
 
-1. **E1** establishes the baseline local RAG capability with vector-only retrieval
-2. **E2** systematically explores retrieval algorithms and embeddings to identify the Local-Best configuration
-3. **E3** extends with decision-aware selective answering to improve reliability
-4. **E4** benchmarks Local-Best against cloud LLM baseline to establish viability threshold
-5. **E5** demonstrates advanced agentic multi-hop reasoning on constrained hardware
+1. **E1** establishes the baseline with vector-only retrieval (MiniLM, k sweep) → EM=0.72
+2. **E2** explores 6 retrieval configurations × 2 embeddings → selects Local-Best (Qwen3 vector, k=5, EM=0.64)
+3. **E3** adds cosine distance gating (τ=0.75) → Selective Accuracy=64.9%, 100% unanswerable detection
+4. **E4** compares Gemma 4B vs GPT-oss 120B → local achieves 80.9% of online EM (viability threshold passed)
+5. **E5** adds agentic dual-gate controller → Selective Accuracy=75.3%, Mixed EM=0.717 (exceeds own Oracle)
 
-Each experiment is **explicitly mapped** to research questions (RQ1-RQ3) and objectives (A-C), uses the **MIRAGE dataset** (Mixed + Oracle) for standardized evaluation, and reports a **comprehensive metrics suite** spanning retrieval quality, generation quality, citation quality, efficiency, and RAG-specific adaptability.
+Each experiment is mapped to research questions (RQ1-RQ3) and objectives (A-C), uses the **MIRAGE dataset** (Base + Mixed + Oracle) for standardized evaluation, and reports metrics spanning retrieval quality, generation quality, citation quality, decision-aware metrics, and RAG-specific adaptability (NV/CA/CI/CM).
 
-The **reproducibility framework** ensures all runs are tracked with immutable config hashes, full telemetry, and version control, enabling regression analysis and iterative refinement as the system evolves.
+**Key deviations from original design:**
+- Partial evaluation subsets (100–120 queries) — full-scale runs not performed
+- E4 online pipeline uses different embedding model (`qwen3-embedding-8b`) than local (`qwen3-embedding:4b`), so E4 is not a pure generator comparison
+- Judge models varied across experiments (construct validity concern for cross-experiment comparisons)
+- Human-Judge Cohen's Kappa not computed
+- Energy/cost efficiency metrics not measured
+- Bootstrap confidence intervals not computed
 
-**Expected Outcome:**
-This experimental sequence will provide empirical evidence to answer whether **lightweight local RAG on mid-tier hardware** can achieve practical viability (RQ3) through careful architectural integration (RQ1) and algorithm selection (RQ2), ultimately demonstrating that advanced RAG capabilities can be democratized beyond cloud infrastructure.
+**Outcome:**
+The experiments demonstrate that a **4B-parameter model with intelligent architecture (dual-gate abstention, conditional hybrid retrieval) achieves quality parity with a 120B model** on trust metrics (faithfulness, groundedness, selective accuracy), with the remaining gap in semantic correctness only. The primary lever for improving local RAG quality is **decision-layer intelligence, not model scale**.

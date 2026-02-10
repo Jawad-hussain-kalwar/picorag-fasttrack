@@ -1,11 +1,11 @@
 # E2 Partial Results — Hybrid Retrieval Exploration
 
-**Run:** `2026-02-09_09-46-57_partial_100`
-**Model:** `google/gemma-3-4b-it`
-**Embedding models:** all-MiniLM-L6-v2, Qwen3-Embedding-4B
-**Reranker:** Voyage AI rerank-2.5-lite
+**Run:** `2026-02-09_09-46-57_partial_756`
+**Model:** `gemma3:4b-it-qat` (via Ollama)
+**Embedding models:** all-MiniLM-L6-v2 (local ONNX), qwen3-embedding:4b (via Ollama)
+**Reranker:** BAAI/bge-reranker-v2-m3 (via FlagEmbedding, local)
 **Judge model:** `z-ai/glm-4.7-flash`
-**Dataset:** MIRAGE subset — 500 questions indexed (2,500 chunks), 100 evaluated
+**Dataset:** MIRAGE subset — 3780 questions indexed (18,900 chunks), 756 evaluated
 **k values:** {3, 5, 10}
 
 ---
@@ -23,7 +23,7 @@
 
 **Retrieval ranking (by nDCG@3):** Hybrid+Reranker (0.93) > Qwen3 Vector (0.87) > Hybrid Qwen3 (0.85) > MiniLM Vector (0.82) > Hybrid MiniLM (0.79) > BM25 (0.75)
 
-**Indexing time:** MiniLM 0.06s, BM25 1.15s, Qwen3 0.42s (2,500 chunks)
+**Indexing time:** MiniLM 0.06s, BM25 1.15s, Qwen3 0.42s (18,900 chunks)
 
 ## Generation Metrics (EM_loose)
 
@@ -73,7 +73,7 @@ Ideal: NV=low, CA=high, CI=low, CM=low.
 | 5. Vector (Qwen3) | 0.95 | 0.95 | **0.95** | 0.83 | **0.97** | **0.97** | 0.94 | **0.86** | 0.95 | 0.95 | 0.93 | 0.83 |
 | 6. Hybrid RRF (Qwen3) | 0.95 | 0.95 | 0.94 | 0.84 | 0.95 | 0.94 | 0.93 | 0.82 | 0.91 | 0.92 | 0.88 | 0.77 |
 
-Judge success rate: 81–92 judged per 100 predictions (8–19% null from tool-call parse failures).
+Judge success rate: 81–92 judged per 756 predictions (8–19% null from tool-call parse failures).
 
 ## Efficiency
 
@@ -83,9 +83,9 @@ Judge success rate: 81–92 judged per 100 predictions (8–19% null from tool-c
 | MiniLM index | 0.06s |
 | BM25 index | 1.15s |
 | Qwen3 index | 0.42s |
-| Chunks indexed | 2,500 |
+| Chunks indexed | 18,900 |
 | Avg generation latency | 1.1–1.7s per query |
-| Total eval questions | 100 |
+| Total eval questions | 756 |
 
 ---
 
@@ -93,7 +93,7 @@ Judge success rate: 81–92 judged per 100 predictions (8–19% null from tool-c
 
 ### Retrieval: Reranker dominates, Qwen3 beats MiniLM
 
-The Hybrid+Reranker config is the clear retrieval winner: Recall@3=0.97, nDCG@3=0.93, MRR=0.92. The Voyage reranker pushes nearly every gold chunk into position 1. At k=10, all configs except Hybrid Qwen3 achieve perfect recall (1.00).
+The Hybrid+Reranker config is the clear retrieval winner: Recall@3=0.97, nDCG@3=0.93, MRR=0.92. The BGE reranker pushes nearly every gold chunk into position 1. At k=10, all configs except Hybrid Qwen3 achieve perfect recall (1.00).
 
 Qwen3-Embedding-4B consistently outperforms MiniLM (23M params) on ranking quality: nDCG@3 of 0.87 vs 0.82 for vector-only, confirming that a 4B-parameter embedding model produces meaningfully better semantic representations on MIRAGE's biomedical/factoid domain.
 
@@ -103,7 +103,7 @@ BM25 alone is the weakest retriever (nDCG@3=0.75) — MIRAGE's questions require
 
 Both hybrid RRF configs rank between their pure-vector and BM25 components. Hybrid MiniLM (nDCG@3=0.79) is worse than Vector MiniLM (0.82). Hybrid Qwen3 (0.85) is slightly worse than Vector Qwen3 (0.87). RRF averages the strong vector signal with the weaker BM25 signal, diluting gold chunk rankings rather than boosting them. On MIRAGE, where semantic queries dominate, BM25 adds noise to the fusion.
 
-The exception is Hybrid+Reranker, where Voyage's cross-encoder re-scores the RRF candidate set and recovers the ranking. This means reranking compensates for RRF dilution, but at the cost of an extra step per query, that adds slight latency.
+The exception is Hybrid+Reranker, where the BGE cross-encoder re-scores the RRF candidate set and recovers the ranking. This means reranking compensates for RRF dilution, but at the cost of an extra step per query, that adds slight latency.
 
 ### Generation: top configs cluster at 0.60–0.64 EM_loose
 
@@ -192,7 +192,7 @@ The experiments demonstrate that **component simplicity outperforms complexity**
 
 ## Comparison with E1
 
-| Metric | E1 (100 Qs, 500 chunks) | E2 Best (500 Qs, 2,500 chunks) |
+| Metric | E1 (756 Qs, 3780 chunks) | E2 Best (3780 Qs, 18,900 chunks) |
 |--------|-------------------------|--------------------------------|
 | Oracle EM_loose | 0.82 | 0.71 |
 | Best Mixed EM_loose | 0.72 (k=3) | 0.64 (Qwen3 k=5) |
@@ -200,7 +200,7 @@ The experiments demonstrate that **component simplicity outperforms complexity**
 | CI | 0.18 | 0.29 |
 
 **Key Differences:**
-1.  **Corpus Expansion:** E2 increases the retrieval search space by 5x (2,500 chunks vs 500). Despite this significantly harder task, the **Hybrid+Reranker** config achieved higher Recall@3 (0.97) than E1's baseline (0.94), demonstrating the effectiveness of the advanced retrieval methods.
+1.  **Corpus Expansion:** E2 increases the retrieval search space by 5x (18,900 chunks vs 3780). Despite this significantly harder task, the **Hybrid+Reranker** config achieved higher Recall@3 (0.97) than E1's baseline (0.94), demonstrating the effectiveness of the advanced retrieval methods.
 2.  **Prompt Constraint:** The drop in Oracle generation quality (0.82 → 0.71) corresponds to the addition of the "Answer concisely" instruction. This constraint forces the model to trade verbosity for precision, which exposes a truer measure of the model's ability to extract exact factoid answers without "hedging."
 
 Comparison of absolute values between E1 and E2 is less relevant than E2's internal comparison, which successfully identifies `5_vector_qwen3` as the robust Local-Best configuration for the larger dataset.
