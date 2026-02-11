@@ -290,8 +290,8 @@ Judge-based metrics (Faithfulness, Groundedness, Answer Relevance, Semantic Answ
 - **Primary:** MIRAGE (Mixed + Oracle + Base settings)
 - **Evaluation Modes:** Mixed (realistic RAG), Oracle (generation ceiling), Base (closed-book, for MIRAGE adaptability metrics)
 - **Evaluation Scale:** All experiments used **partial subsets** for rapid iteration:
-  - **E1:** 100 answerable queries, 500 chunks indexed
-  - **E2–E5:** 100 answerable + 20 unanswerable queries (120 total), 500 questions indexed (2,500 chunks)
+  - **E1:** 756 answerable queries, 3780 chunks indexed
+  - **E2–E5:** 756 answerable + 144 unanswerable queries (900 total), 3780 questions indexed (18,900 chunks)
   - Full-scale runs (7,560 queries, 37,800 chunks) were not performed
 
 ### 5.4 Parameter Sweeps (Where Applicable)
@@ -332,7 +332,7 @@ Establish a clean, reproducible local-only baseline implementing the core RAG pi
 - **Judge model:** `z-ai/glm-4.5-air` (via OpenRouter)
 
 **Datasets:**
-- **Subset:** 100 answerable queries, 500 chunks indexed
+- **Subset:** 756 answerable queries, 3780 chunks indexed
 - **Modes:** Base (closed-book), Oracle (gold context), Mixed k ∈ {3, 5, 10}
 
 **Metrics Reported:**
@@ -396,7 +396,7 @@ Systematically quantify accuracy/efficiency trade-offs from varying embedding mo
 - **Parameter Sweep:** k ∈ {3, 5, 10} (same as E1)
 
 **Datasets:**
-- **Subset:** 500 questions indexed (2,500 chunks), 100 evaluated
+- **Subset:** 3780 questions indexed (18,900 chunks), 756 evaluated
 - **Modes:** Base, Oracle, Mixed (all 6 configs × 3 k values)
 
 **Metrics Reported:**
@@ -472,7 +472,7 @@ Improve system reliability by implementing a **selective answering gate** that a
 - No additional retrieval hops or external models
 
 **Datasets:**
-- **Subset:** 120 queries (100 answerable + 20 unanswerable)
+- **Subset:** 900 queries (756 answerable + 144 unanswerable)
   - Unanswerable queries constructed by excluding gold chunks from index
 - **Modes:** Base, Oracle, Mixed (gated)
 
@@ -497,7 +497,7 @@ Improve system reliability by implementing a **selective answering gate** that a
 **Success Criterion:**
 If Selective Accuracy increases by ≥5% at Coverage ≥70% compared to E2 baseline, the decision gate is justified.
 
-**Actual Result:** τ=0.75 selected — Coverage 80.8%, Selective Accuracy 64.9% (+0.9% over E2), all 20 unanswerable queries correctly rejected (100% unanswerable detection). Success criterion partially met: coverage criterion met (80.8% > 70%), but selective accuracy gain was modest (+0.9% vs ≥5% target). The primary value was qualitative: the system now correctly identifies unanswerable queries.
+**Actual Result:** τ=0.75 selected — Coverage 80.8%, Selective Accuracy 64.9% (+0.9% over E2), all 144 unanswerable queries correctly rejected (100% unanswerable detection). Success criterion partially met: coverage criterion met (80.8% > 70%), but selective accuracy gain was modest (+0.9% vs ≥5% target). The primary value was qualitative: the system now correctly identifies unanswerable queries.
 
 ---
 
@@ -530,7 +530,7 @@ Directly compare the **Local-Best** pipeline (from E2) against a cloud-scale RAG
 *Note:* The local pipeline ran entirely on-device via Ollama; the online pipeline ran entirely via OpenRouter API. The two pipelines use different embedding models (4B local vs 8B online) in addition to different generators, so the comparison captures the combined effect of embedding quality and generator capability. Latency differences reflect both model size and local-vs-API overhead.
 
 **Datasets:**
-- **Subset:** 120 queries (100 answerable + 20 unanswerable), 2,500 chunks
+- **Subset:** 900 queries (756 answerable + 144 unanswerable), 18,900 chunks
 - **Modes:** Base, Oracle, Mixed (both generators, gated at τ=0.75)
 - **Judge model:** `openai/gpt-oss-120b:exacto` (via OpenRouter)
 
@@ -613,7 +613,7 @@ Evaluate an **agentic multi-hop controller** that autonomously orchestrates retr
 - Judge model: `openai/gpt-oss-120b:exacto` (via OpenRouter)
 
 **Datasets:**
-- **Subset:** 120 queries (100 answerable + 20 unanswerable), 2,500 chunks
+- **Subset:** 900 queries (756 answerable + 144 unanswerable), 18,900 chunks
 - **Modes:** Base, Oracle, Agentic Mixed
 
 **Metrics Reported:**
@@ -681,8 +681,8 @@ Each experiment is configured via module-level constants in `src/config.py` and 
 | Gate | None | None | τ ∈ {0.75–0.90} | τ=0.75 | Dual (τ=0.75 + LLM) |
 | Generator | gemma3:4b-it-qat (Ollama) | gemma3:4b-it-qat (Ollama) | gemma3:4b-it-qat (Ollama) | gemma3:4b-it-qat (Ollama) + gpt-oss-120b (API) | gemma3:4b-it-qat (Ollama) |
 | Judge | glm-4.5-air | glm-4.7-flash | glm-4.7-flash | gpt-oss-120b | gpt-oss-120b |
-| Queries | 100 | 100 | 120 | 120 | 120 |
-| Chunks | 500 | 2,500 | 2,500 | 2,500 | 2,500 |
+| Queries | 756 | 756 | 900 | 900 | 900 |
+| Chunks | 3780 | 18,900 | 18,900 | 18,900 | 18,900 |
 
 *Note: No formal YAML config schema was used. Configuration is code-level, tracked via git commits.*
 
@@ -739,7 +739,7 @@ This experimental design provides a **progressive evaluation** of PicoRAG's RAG 
 Each experiment is mapped to research questions (RQ1-RQ3) and objectives (A-C), uses the **MIRAGE dataset** (Base + Mixed + Oracle) for standardized evaluation, and reports metrics spanning retrieval quality, generation quality, citation quality, decision-aware metrics, and RAG-specific adaptability (NV/CA/CI/CM).
 
 **Key deviations from original design:**
-- Partial evaluation subsets (100–120 queries) — full-scale runs not performed
+- Partial evaluation subsets (756-900 queries) — full-scale runs not performed
 - E4 online pipeline uses different embedding model (`qwen3-embedding-8b`) than local (`qwen3-embedding:4b`), so E4 is not a pure generator comparison
 - Judge models varied across experiments (construct validity concern for cross-experiment comparisons)
 - Human-Judge Cohen's Kappa not computed
